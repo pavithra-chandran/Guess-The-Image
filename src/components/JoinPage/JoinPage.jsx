@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Play, Users, Target, Zap, Crown, Sparkles, Trophy } from 'lucide-react';
+import { ArrowLeft, Play, Users, Target } from 'lucide-react';
 import { db } from '../../firebase';
-import { ref, onValue, get } from 'firebase/database';
+import { ref, get } from 'firebase/database';
 import styles from './JoinPage.module.css';
 
 const JoinPage = () => {
@@ -13,7 +13,6 @@ const JoinPage = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [particles, setParticles] = useState([]);
-  const [players, setPlayers] = useState([]);
   const [roomExists, setRoomExists] = useState(false);
 
   useEffect(() => {
@@ -38,34 +37,14 @@ const JoinPage = () => {
           const roomData = snapshot.val();
           console.log('Room data:', roomData);
           setRoomExists(true);
-          // Convert players object to array
-          const playersList = roomData.players ? Object.values(roomData.players) : [];
-          console.log('Players list:', playersList);
-          setPlayers(playersList);
-          
-          // Listen for real-time updates
-          const unsubscribe = onValue(roomRef, (snapshot) => {
-            if (snapshot.exists()) {
-              const data = snapshot.val();
-              console.log('Real-time room data:', data);
-              const playersData = data.players ? Object.values(data.players) : [];
-              console.log('Real-time players:', playersData);
-              setPlayers(playersData);
-            }
-          });
-          
-          return () => unsubscribe();
         } else {
           setRoomExists(false);
-          setPlayers([]);
         }
       }).catch((error) => {
         console.error('Error checking room:', error);
         setRoomExists(false);
-        setPlayers([]);
       });
     } else {
-      setPlayers([]);
       setRoomExists(false);
     }
   }, [joinForm.roomCode]);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Gamepad2, Zap, Star, Trophy, Users, Plus, Shield, Target, Sparkles } from 'lucide-react';
+import { Gamepad2, Zap, Star, Trophy, Users, Plus, Sparkles } from 'lucide-react';
 import styles from './HomePage.module.css';
 
 const HomePage = () => {

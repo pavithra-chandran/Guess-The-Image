@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Copy, Check, Play, Users, Gamepad2, Zap, Trophy, Target } from 'lucide-react';
+import { Copy, Check, Play, Users, Gamepad2, Zap } from 'lucide-react';
 import { db } from '../../firebase';
 import { ref, set, onValue, update, get, remove } from 'firebase/database';
 import CountdownOverlay from '../CountdownOverlay/CountdownOverlay.jsx';
