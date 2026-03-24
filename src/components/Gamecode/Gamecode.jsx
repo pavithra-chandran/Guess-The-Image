@@ -300,14 +300,17 @@ const GameLobby = () => {
           padding: 2rem;
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
           position: relative;
-          overflow: hidden;
+          overflow-x: hidden;
+          box-sizing: border-box;
         }
 
         .content-wrapper {
           position: relative;
           z-index: 1;
           max-width: 1100px;
+          width: 100%;
           margin: 0 auto;
+          box-sizing: border-box;
         }
 
         .header {
@@ -355,6 +358,8 @@ const GameLobby = () => {
           grid-template-columns: 1fr 1.5fr;
           gap: 2rem;
           margin-bottom: 2rem;
+          width: 100%;
+          box-sizing: border-box;
         }
 
         .code-section {
@@ -367,6 +372,8 @@ const GameLobby = () => {
             0 0 80px rgba(120, 119, 198, 0.2),
             inset 0 1px 0 rgba(255, 255, 255, 0.1);
           backdrop-filter: blur(20px);
+          box-sizing: border-box;
+          min-width: 0;
         }
 
         .code-label {
@@ -433,6 +440,8 @@ const GameLobby = () => {
             0 0 80px rgba(120, 119, 198, 0.2),
             inset 0 1px 0 rgba(255, 255, 255, 0.1);
           backdrop-filter: blur(20px);
+          box-sizing: border-box;
+          min-width: 0;
         }
 
         .players-header {
@@ -609,7 +618,7 @@ const GameLobby = () => {
 
         @media (max-width: 768px) {
           .game-container {
-            padding: 1rem;
+            padding: 1rem 0.75rem;
           }
 
           .header {
