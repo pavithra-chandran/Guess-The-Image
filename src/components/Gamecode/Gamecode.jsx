@@ -606,6 +606,83 @@ const GameLobby = () => {
             grid-template-columns: 1fr;
           }
         }
+
+        @media (max-width: 768px) {
+          .game-container {
+            padding: 1rem;
+          }
+
+          .header {
+            margin-bottom: 1.5rem;
+          }
+
+          .header h1 {
+            font-size: 1.8rem;
+            gap: 0.6rem;
+            letter-spacing: 1px;
+          }
+
+          .subtitle {
+            font-size: 0.95rem;
+          }
+
+          .main-grid {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+          }
+
+          .code-section,
+          .players-section {
+            padding: 1.2rem;
+            border-radius: 16px;
+          }
+
+          .code-label {
+            font-size: 1rem;
+            margin-bottom: 1rem;
+          }
+
+          .code-display {
+            padding: 1rem;
+            margin-bottom: 1rem;
+          }
+
+          .code-text {
+            font-size: 2rem;
+            letter-spacing: 0.3rem;
+          }
+
+          .copy-button {
+            padding: 0.8rem 1rem;
+            font-size: 1rem;
+          }
+
+          .players-header {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+          }
+
+          .player-card {
+            padding: 0.75rem 1rem;
+          }
+
+          .player-avatar {
+            font-size: 1.5rem;
+            width: 2rem;
+          }
+
+          .start-button {
+            width: 90%;
+            font-size: 1.1rem;
+            padding: 1rem;
+          }
+
+          .waiting-message {
+            width: 90%;
+            font-size: 1rem;
+            padding: 1rem;
+          }
+        }
       `}</style>
 
       <div className="content-wrapper">
@@ -664,7 +741,7 @@ const GameLobby = () => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'center', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', flexDirection: 'column', alignItems: 'center', gap: '1rem', padding: '0 1rem' }}>
           {/* Ready button for all players including host */}
           <button 
             className="ready-button" 
