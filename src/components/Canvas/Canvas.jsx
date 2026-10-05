@@ -461,18 +461,38 @@ const DrawingGame = () => {
     });
 
     const drawingRef = ref(db, `rooms/${roomCode}/drawing`);
+    let lastDrawingKey = null;
     // Full replay only on initial load or clear
     const unsubDrawing = onValue(drawingRef, (snap) => {
-      if (isDrawingRef.current) return;
-      const canvas = permanentCanvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
       const data = snap.val();
-      if (data) Object.values(data)
-        .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
-        .forEach(d => drawOnCanvas(d));
+      if (data) {
+        const entries = Object.entries(data).sort((a, b) => (a[1].timestamp || 0) - (b[1].timestamp || 0));
+        const latestKey = entries[entries.length - 1]?.[0];
+        const latestStroke = entries[entries.length - 1]?.[1];
+        // Skip replay if this is just our own new commit (drawer side)
+        if (isDrawingRef.current) return;
+        if (latestKey && latestKey === lastDrawingKey) return;
+        // If only one new stroke added (not a clear), just draw the new stroke
+        if (lastDrawingKey && latestStroke && latestStroke.type !== 'clear') {
+          lastDrawingKey = latestKey;
+          drawOnCanvas(latestStroke);
+          return;
+        }
+        lastDrawingKey = latestKey;
+        const canvas = permanentCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        entries.forEach(([, d]) => drawOnCanvas(d));
+      } else {
+        lastDrawingKey = null;
+        const canvas = permanentCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
     });
 
     // Live stroke from drawer — renders on remote clients only
@@ -1486,6 +1506,8 @@ const ChatPanel = ({
               type="submit"
               className={styles.guessButton}
               disabled={isSending || !guessInput.trim()}
+              onMouseDown={(e) => e.preventDefault()}
+              onTouchStart={(e) => e.preventDefault()}
             >
               <Send size={18} />
             </button>
