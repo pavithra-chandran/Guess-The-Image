@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Users, Clock, Trophy, Send, Palette, Eraser, RotateCcw, CheckCircle, XCircle } from 'lucide-react';
 import { db } from '../../firebase';
-import { ref, onValue, push, set, update, serverTimestamp, get, runTransaction } from 'firebase/database';
+import { ref, onValue, push, set, update, get, runTransaction } from 'firebase/database';
 import styles from './Canvas.module.css';
 import WordChoice from '../WordChoice/WordChoice';
 import WaitingForWord from '../WaitingForWord/WaitingForWord';
@@ -179,6 +179,35 @@ const DrawingGame = () => {
 
   const remoteLastPosRef = useRef({ x: 0, y: 0 });
   const permanentCanvasRef = useRef(null);
+  const remotePreviewCanvasRef = useRef(null);
+
+  const clearRemotePreview = useCallback(() => {
+    const c = remotePreviewCanvasRef.current;
+    if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
+  }, []);
+
+  const renderRemoteStroke = useCallback((data) => {
+    const c = remotePreviewCanvasRef.current;
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = data.color || '#000';
+    ctx.lineWidth = data.size || 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (data.type === 'livePoint' && data.points && data.points.length >= 2) {
+      const pts = data.points;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length - 1; i++) {
+        const mx = (pts[i].x + pts[i+1].x) / 2;
+        const my = (pts[i].y + pts[i+1].y) / 2;
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+      }
+      ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
+      ctx.stroke();
+    }
+  }, []);
 
   const drawOnCanvas = useCallback((data) => {
     const canvas = permanentCanvasRef.current;
@@ -205,6 +234,22 @@ const DrawingGame = () => {
       ctx.beginPath();
       ctx.moveTo(midX, midY);
       remoteLastPosRef.current = { x: data.x, y: data.y };
+    } else if (data.type === 'freehand') {
+      const pts = data.points;
+      if (!pts || pts.length < 2) return;
+      ctx.strokeStyle = data.color;
+      ctx.lineWidth = data.size;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length - 1; i++) {
+        const mx = (pts[i].x + pts[i+1].x) / 2;
+        const my = (pts[i].y + pts[i+1].y) / 2;
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+      }
+      ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y);
+      ctx.stroke();
     } else if (data.type === 'circle') {
       ctx.strokeStyle = data.color;
       ctx.lineWidth = data.size;
@@ -416,6 +461,7 @@ const DrawingGame = () => {
     });
 
     const drawingRef = ref(db, `rooms/${roomCode}/drawing`);
+    // Full replay only on initial load or clear
     const unsubDrawing = onValue(drawingRef, (snap) => {
       if (isDrawingRef.current) return;
       const canvas = permanentCanvasRef.current;
@@ -424,7 +470,21 @@ const DrawingGame = () => {
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       const data = snap.val();
-      if (data) Object.values(data).forEach(d => drawOnCanvas(d));
+      if (data) Object.values(data)
+        .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+        .forEach(d => drawOnCanvas(d));
+    });
+
+    // Live stroke from drawer — renders on remote clients only
+    const activeStrokeRef = ref(db, `rooms/${roomCode}/activeStroke`);
+    const unsubActive = onValue(activeStrokeRef, (snap) => {
+      if (isDrawingRef.current) return;
+      const data = snap.val();
+      if (!data) {
+        clearRemotePreview();
+        return;
+      }
+      renderRemoteStroke(data);
     });
 
     const gameStateRef = ref(db, `rooms/${roomCode}/gameState`);
@@ -494,6 +554,7 @@ const DrawingGame = () => {
     return () => {
       unsubPlayers();
       unsubDrawing();
+      unsubActive();
       unsubGameState();
       unsubChat();
     };
@@ -523,10 +584,35 @@ const DrawingGame = () => {
     });
   }, [roomCode]);
 
+  // Throttle ref for live stroke updates
+  const lastSendRef = useRef(0);
+  const SEND_INTERVAL = 30; // ms — ~33fps max to Firebase
+
   const sendDrawing = useCallback((drawData) => {
     if (!roomCode) return;
-    const drawingRef = ref(db, `rooms/${roomCode}/drawing`);
-    push(drawingRef, { ...drawData, player: currentPlayer?.name, timestamp: serverTimestamp() });
+    // Completed strokes (line/circle/ellipse/arc/start+draw batch) go to permanent node
+    if (drawData.type === 'commit') {
+      const drawingRef = ref(db, `rooms/${roomCode}/drawing`);
+      push(drawingRef, { ...drawData.stroke, player: currentPlayer?.name, timestamp: Date.now() });
+      // Clear the active stroke node
+      set(ref(db, `rooms/${roomCode}/activeStroke`), null);
+      return;
+    }
+    if (drawData.type === 'clear') {
+      const drawingRef = ref(db, `rooms/${roomCode}/drawing`);
+      push(drawingRef, { type: 'clear', timestamp: Date.now() });
+      set(ref(db, `rooms/${roomCode}/activeStroke`), null);
+      return;
+    }
+    // Live freehand points — throttled, written to activeStroke (overwrites, no accumulation)
+    const now = Date.now();
+    if (now - lastSendRef.current < SEND_INTERVAL) return;
+    lastSendRef.current = now;
+    set(ref(db, `rooms/${roomCode}/activeStroke`), {
+      ...drawData,
+      player: currentPlayer?.name,
+      ts: now,
+    });
   }, [roomCode, currentPlayer]);
 
   // Atomic correct-guess scoring
@@ -692,6 +778,7 @@ const DrawingGame = () => {
                 isDrawingRef={isDrawingRef}
                 getWordHint={getWordHint}
                 permanentCanvasRef={permanentCanvasRef}
+                remotePreviewCanvasRef={remotePreviewCanvasRef}
               />
             )}
           </div>
@@ -925,7 +1012,7 @@ const GameCanvas = React.memo(({
   currentWord, roundStatus, currentDrawerName, currentDrawerId,
   isCurrentPlayerDrawing, onSendDrawing, revealedLetters,
   currentPlayerId, currentPlayerName, round, isDrawingRef, getWordHint,
-  permanentCanvasRef
+  permanentCanvasRef, remotePreviewCanvasRef
 }) => {
   const isDrawer = (currentPlayerId && currentDrawerId && currentPlayerId === currentDrawerId) ||
     (currentPlayerName && currentDrawerName && currentPlayerName === currentDrawerName);
@@ -1106,21 +1193,20 @@ const GameCanvas = React.memo(({
         ctx.moveTo(g.start.x, g.start.y);
         ctx.lineTo(end.x, end.y);
         ctx.stroke();
-        onSendDrawing({ type: 'line', x1: g.start.x, y1: g.start.y, x2: end.x, y2: end.y, color: strokeColor, size: strokeWidth });
+        onSendDrawing({ type: 'commit', stroke: { type: 'line', x1: g.start.x, y1: g.start.y, x2: end.x, y2: end.y, color: strokeColor, size: strokeWidth } });
       } else if (qs.type === 'circle') {
         ctx.arc(g.cx, g.cy, g.r, 0, Math.PI * 2);
         ctx.stroke();
-        onSendDrawing({ type: 'circle', cx: g.cx, cy: g.cy, r: g.r, color: strokeColor, size: strokeWidth });
+        onSendDrawing({ type: 'commit', stroke: { type: 'circle', cx: g.cx, cy: g.cy, r: g.r, color: strokeColor, size: strokeWidth } });
       } else if (qs.type === 'ellipse') {
         ctx.ellipse(g.cx, g.cy, g.rx, g.ry, 0, 0, Math.PI * 2);
         ctx.stroke();
-        onSendDrawing({ type: 'ellipse', cx: g.cx, cy: g.cy, rx: g.rx, ry: g.ry, color: strokeColor, size: strokeWidth });
+        onSendDrawing({ type: 'commit', stroke: { type: 'ellipse', cx: g.cx, cy: g.cy, rx: g.rx, ry: g.ry, color: strokeColor, size: strokeWidth } });
       } else if (qs.type === 'arc') {
         ctx.arc(g.cx, g.cy, g.r, g.startAngle, g.endAngle, g.anticlockwise);
         ctx.stroke();
-        onSendDrawing({ type: 'arc', cx: g.cx, cy: g.cy, r: g.r, startAngle: g.startAngle, endAngle: g.endAngle, anticlockwise: g.anticlockwise, color: strokeColor, size: strokeWidth });
+        onSendDrawing({ type: 'commit', stroke: { type: 'arc', cx: g.cx, cy: g.cy, r: g.r, startAngle: g.startAngle, endAngle: g.endAngle, anticlockwise: g.anticlockwise, color: strokeColor, size: strokeWidth } });
       } else {
-        // curve
         const pts = g.pts;
         if (pts && pts.length >= 2) {
           ctx.moveTo(pts[0].x, pts[0].y);
@@ -1131,10 +1217,7 @@ const GameCanvas = React.memo(({
           }
           ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
           ctx.stroke();
-          onSendDrawing({ type: 'start', x: pts[0].x, y: pts[0].y, color: strokeColor, size: strokeWidth });
-          for (let i = 1; i < pts.length; i++) {
-            onSendDrawing({ type: 'draw', x: pts[i].x, y: pts[i].y, color: strokeColor, size: strokeWidth });
-          }
+          onSendDrawing({ type: 'commit', stroke: { type: 'freehand', points: pts, color: strokeColor, size: strokeWidth } });
         }
       }
     } else {
@@ -1149,10 +1232,7 @@ const GameCanvas = React.memo(({
         }
         ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
         ctx.stroke();
-        onSendDrawing({ type: 'start', x: pts[0].x, y: pts[0].y, color: strokeColor, size: strokeWidth });
-        for (let i = 1; i < pts.length; i++) {
-          onSendDrawing({ type: 'draw', x: pts[i].x, y: pts[i].y, color: strokeColor, size: strokeWidth });
-        }
+        onSendDrawing({ type: 'commit', stroke: { type: 'freehand', points: pts, color: strokeColor, size: strokeWidth } });
       }
     }
   };
@@ -1228,6 +1308,11 @@ const GameCanvas = React.memo(({
       clearHoldTimer();
     }
 
+    // Send live points to activeStroke for remote preview (throttled inside sendDrawing)
+    const strokeColor = tool === 'eraser' ? '#FFFFFF' : brushColor;
+    const strokeWidth = tool === 'eraser' ? brushSize * 2 : brushSize;
+    onSendDrawing({ type: 'livePoint', points: pts, color: strokeColor, size: strokeWidth });
+
     scheduleRender();
   };
 
@@ -1300,6 +1385,13 @@ const GameCanvas = React.memo(({
             width={600}
             height={400}
             className={styles.canvas}
+          />
+          <canvas
+            ref={remotePreviewCanvasRef}
+            width={600}
+            height={400}
+            className={styles.canvas}
+            style={{ pointerEvents: 'none' }}
           />
           <canvas
             ref={previewCanvasRef}
