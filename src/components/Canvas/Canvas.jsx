@@ -1,122 +1,142 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Users, Clock, Trophy, Send, Palette, Eraser, RotateCcw, Undo, CheckCircle, XCircle } from 'lucide-react';
+import { Users, Clock, Trophy, Send, Palette, Eraser, RotateCcw, CheckCircle, XCircle } from 'lucide-react';
 import { db } from '../../firebase';
-import { ref, onValue, push, set, update, serverTimestamp, get } from 'firebase/database';
+import { ref, onValue, push, set, update, serverTimestamp, get, runTransaction } from 'firebase/database';
 import styles from './Canvas.module.css';
+import WordChoice from '../WordChoice/WordChoice';
+import WaitingForWord from '../WaitingForWord/WaitingForWord';
 
-// Word list for the game
 const WORDS = [
-  'SUN', 'MOON', 'STAR', 'CLOUD', 'RAIN', 'SNOW', 'WIND', 'STORM', 'RAINBOW', 'LIGHTNING',
-  'MOUNTAIN', 'HILL', 'VALLEY', 'RIVER', 'LAKE', 'SEA', 'OCEAN', 'ISLAND', 'BEACH', 'CAVE',
-  'FOREST', 'DESERT', 'TREE', 'BUSH', 'GRASS', 'FLOWER', 'LEAF', 'SEED', 'ROOT', 'BRANCH',
-  'CAT', 'DOG', 'MOUSE', 'RABBIT', 'HORSE', 'COW', 'SHEEP', 'GOAT', 'PIG', 'DEER',
-  'LION', 'TIGER', 'ELEPHANT', 'ZEBRA', 'MONKEY', 'BEAR', 'FOX', 'WOLF', 'GIRAFFE', 'KANGAROO',
-  'FROG', 'TURTLE', 'SNAKE', 'LIZARD', 'CROCODILE', 'DOLPHIN', 'WHALE', 'SHARK', 'OCTOPUS', 'CRAB',
-  'FISH', 'SEAHORSE', 'STARFISH', 'SQUID', 'PENGUIN', 'OWL', 'EAGLE', 'PARROT', 'DUCK', 'HEN',
-  'ANT', 'BEE', 'BUTTERFLY', 'SPIDER', 'LADYBUG', 'DRAGONFLY', 'MOSQUITO', 'WORM', 'SNAIL', 'BEETLE',
-  'HOUSE', 'CASTLE', 'HUT', 'IGLOO', 'TENT', 'BUILDING', 'TOWER', 'BRIDGE', 'ROAD', 'PATH',
-  'DOOR', 'WINDOW', 'ROOF', 'FENCE', 'GATE', 'STAIRS', 'ELEVATOR', 'ESCALATOR', 'BALCONY', 'CHIMNEY',
-  'CHAIR', 'TABLE', 'BED', 'SOFA', 'CUPBOARD', 'DESK', 'LAMP', 'CLOCK', 'FAN', 'MIRROR',
-  'TV', 'PHONE', 'COMPUTER', 'LAPTOP', 'KEYBOARD', 'MOUSE DEVICE', 'BOOK', 'NOTEBOOK', 'PEN', 'PENCIL',
-  'ERASER', 'SHARPENER', 'BAG', 'BOTTLE', 'LUNCHBOX', 'UMBRELLA', 'GLASSES', 'WATCH', 'CAMERA', 'MICROPHONE',
-  'CAR', 'BUS', 'TRAIN', 'BIKE', 'TRUCK', 'AMBULANCE', 'FIRETRUCK', 'POLICE CAR', 'SCOOTER', 'VAN',
-  'SHIP', 'BOAT', 'SUBMARINE', 'AIRPLANE', 'HELICOPTER', 'ROCKET', 'SPACESHIP', 'SATELLITE', 'PARACHUTE', 'HOT AIR BALLOON',
-  'APPLE', 'BANANA', 'MANGO', 'ORANGE', 'GRAPES', 'WATERMELON', 'PINEAPPLE', 'PEAR', 'PEACH', 'CHERRY',
-  'STRAWBERRY', 'KIWI', 'LEMON', 'COCONUT', 'PAPAYA', 'GUAVA', 'PLUM', 'FIG', 'DATE', 'LYCHEE',
-  'CARROT', 'POTATO', 'TOMATO', 'ONION', 'GARLIC', 'CABBAGE', 'CAULIFLOWER', 'BROCCOLI', 'SPINACH', 'PEAS',
-  'BEANS', 'CORN', 'CUCUMBER', 'PUMPKIN', 'RADISH', 'BEETROOT', 'CHILLI', 'GINGER', 'OKRA', 'MUSHROOM',
-  'CAKE', 'BREAD', 'RICE', 'NOODLES', 'PASTA', 'PIZZA', 'BURGER', 'SANDWICH', 'SOUP', 'SALAD',
-  'MILK', 'JUICE', 'TEA', 'COFFEE', 'ICE CREAM', 'CHOCOLATE', 'CANDY', 'COOKIE', 'DONUT', 'PANCAKE',
-  'BALL', 'BAT', 'KITE', 'DOLL', 'TEDDY', 'PUZZLE', 'BLOCKS', 'ROBOT', 'CAR TOY', 'TRAIN TOY',
-  'SWING', 'SLIDE', 'SEE-SAW', 'TRAMPOLINE', 'SKATEBOARD', 'ROLLER SKATES', 'FRISBEE', 'YOYO', 'DRUM', 'PIANO',
-  'GUITAR', 'VIOLIN', 'FLUTE', 'TRUMPET', 'HARP', 'BELL', 'WHISTLE', 'MIC', 'SPEAKER', 'HEADPHONES',
-  'HAT', 'CAP', 'HELMET', 'CROWN', 'MASK', 'SHIRT', 'T-SHIRT', 'PANTS', 'JEANS', 'SHORTS',
-  'DRESS', 'SKIRT', 'JACKET', 'COAT', 'SWEATER', 'SCARF', 'GLOVES', 'SOCKS', 'SHOES', 'BOOTS',
-  'FACE', 'EYES', 'NOSE', 'MOUTH', 'EAR', 'HAIR', 'HAND', 'FINGER', 'LEG', 'FOOT',
-  'SMILE', 'LAUGH', 'CRY', 'ANGRY', 'SURPRISED', 'SLEEPING', 'RUNNING', 'JUMPING', 'DANCING', 'READING',
-  'WRITING', 'DRAWING', 'PAINTING', 'SINGING', 'SWIMMING', 'FLYING', 'CLIMBING', 'THINKING', 'EATING', 'DRINKING',
-  'CIRCLE', 'SQUARE', 'TRIANGLE', 'RECTANGLE', 'OVAL', 'STAR SHAPE', 'HEART', 'CUBE', 'SPHERE', 'CONE',
-  'CYLINDER', 'PYRAMID', 'LINE', 'DOT', 'ARROW', 'ZIGZAG', 'SPIRAL', 'WAVE', 'CROSS', 'GRID',
-  'SCHOOL', 'CLASSROOM', 'TEACHER', 'STUDENT', 'BLACKBOARD', 'CHALK', 'DESK', 'PLAYGROUND', 'LIBRARY', 'LAB',
-  'HOSPITAL', 'DOCTOR', 'NURSE', 'AMBULANCE', 'POLICE', 'FIRE STATION', 'POST OFFICE', 'BANK', 'SHOP', 'MARKET',
-  'PARK', 'GARDEN', 'ZOO', 'MUSEUM', 'THEATER', 'CINEMA', 'RESTAURANT', 'HOTEL', 'AIRPORT', 'RAILWAY STATION',
-  'KING', 'QUEEN', 'PRINCE', 'PRINCESS', 'KNIGHT', 'DRAGON', 'FAIRY', 'WIZARD', 'MAGIC WAND', 'CASTLE',
-  'PIRATE', 'TREASURE', 'MAP', 'SWORD', 'SHIELD', 'ROBOT', 'ALIEN', 'MONSTER', 'ZOMBIE', 'GHOST',
-  'SUPERHERO', 'VILLAIN', 'DETECTIVE', 'ASTRONAUT', 'SCIENTIST', 'CHEF', 'FARMER', 'POLICEMAN', 'FIREFIGHTER', 'TEACHER',
-  'CLOCK TOWER', 'WINDMILL', 'LIGHTHOUSE', 'FERRIS WHEEL', 'ROLLER COASTER', 'CAROUSEL', 'CIRCUS', 'TENT SHOW', 'BALLOON SELLER', 'ICE CREAM TRUCK',
-  'TREASURE CHEST', 'KEY', 'LOCK', 'COMPASS', 'BINOCULARS', 'BACKPACK', 'MAP ROUTE', 'SIGNBOARD', 'TRAFFIC LIGHT', 'CROSSING',
-  'VOLCANO', 'EARTHQUAKE', 'FLOOD', 'TORNADO', 'GLACIER', 'ICEBERG', 'CORAL', 'REEF', 'WATERFALL', 'GEYSER',
-  'BUBBLES', 'SHADOW', 'REFLECTION', 'FOOTPRINT', 'HANDPRINT', 'PUZZLE PIECE', 'MAZE', 'LABYRINTH', 'CHECKERBOARD', 'DOMINO',
-  'CANDLE', 'TORCH', 'LANTERN', 'FIRE', 'SMOKE', 'ASH', 'SPARK', 'FLAME', 'MATCHSTICK', 'CAMPFIRE',
-  'GARDENING', 'PLANTING', 'HARVESTING', 'FISHING', 'CAMPING', 'HIKING', 'PICNIC', 'TRAVELING', 'SHOPPING', 'COOKING'
+  // Nature & space
+  'THUNDER', 'HAILSTONE', 'LOG', 'STUMP', 'SEASHELL', 'PEBBLE', 'CRATER', 'SATELLITE', 'ECLIPSE',
+  'ASTEROID', 'UFO', 'SHOOTING STAR', 'CRESCENT', 'SPACE STATION', 'SOLAR SYSTEM', 'ICEBERG', 'OASIS',
+
+  // Animals
+  'GOOSE', 'TURKEY', 'DONKEY', 'BUFFALO', 'OX', 'LLAMA', 'MOOSE', 'OTTER', 'BEAVER', 'RACCOON',
+  'SKUNK', 'GORILLA', 'CHEETAH', 'LEOPARD', 'PORCUPINE', 'SLOTH', 'WALRUS', 'POLAR BEAR', 'STINGRAY',
+  'EEL', 'LOBSTER', 'SHRIMP', 'GRASSHOPPER', 'WASP', 'MOTH', 'FIREFLY', 'TOAD', 'CHAMELEON',
+  'TOUCAN', 'PELICAN', 'STORK', 'SPARROW', 'HUMMINGBIRD', 'BEEHIVE', 'BIRDCAGE', 'DOGHOUSE', 'AQUARIUM',
+
+  // Household & tools
+  'STOVE', 'MICROWAVE', 'WASHING MACHINE', 'IRON', 'HANGER', 'SHELF', 'BOOKSHELF', 'CARPET',
+  'DOORBELL', 'MAILBOX', 'TRASH CAN', 'VASE', 'PICTURE FRAME', 'CHANDELIER', 'HAMMOCK', 'CRADLE',
+  'SPONGE', 'MOP', 'SHOVEL', 'RAKE', 'WHEELBARROW', 'WATERING CAN', 'HOSE', 'DRILL', 'WRENCH',
+  'PLIERS', 'STAPLER', 'PAPER CLIP', 'BASKET', 'JAR', 'MUG', 'TEAPOT', 'CHOPSTICKS', 'LADLE',
+  'WHISK', 'ROLLING PIN', 'BLENDER', 'SUITCASE', 'SLEEPING BAG', 'FLASHLIGHT', 'CHIMNEY SMOKE',
+
+  // Food & drink
+  'PEANUT', 'WALNUT', 'SUSHI', 'DUMPLING', 'BAGEL', 'CROISSANT', 'MUFFIN', 'PIE', 'OMELETTE',
+  'SAUSAGE', 'BACON', 'STEAK', 'DRUMSTICK', 'CORN COB', 'BEETROOT', 'LETTUCE', 'GINGER', 'WATER',
+  'SODA', 'CANDY CANE', 'GINGERBREAD MAN', 'DOSA', 'IDLI', 'LADDU', 'BIRYANI', 'JELLY', 'SUNDAE',
+
+  // Transport & construction
+  'MOTORCYCLE', 'BICYCLE', 'FIRE TRUCK', 'POLICE CAR', 'SCHOOL BUS', 'TRAM', 'SUBWAY', 'CRANE',
+  'BULLDOZER', 'EXCAVATOR', 'FERRY', 'RAFT', 'SAILBOAT', 'YACHT', 'JET', 'GLIDER', 'ESCALATOR',
+  'ELEVATOR', 'WHEELCHAIR', 'STROLLER', 'ROAD SIGN', 'TUNNEL', 'SKYSCRAPER', 'CONSTRUCTION SITE',
+
+  // Clothing & accessories
+  'SUNGLASSES', 'BOW TIE', 'BELT', 'SARI', 'TURBAN', 'BANDANA', 'RAINCOAT', 'PAJAMAS', 'SWIMSUIT',
+  'BUTTON', 'ZIPPER', 'EARRINGS', 'BRACELET', 'HANDBAG', 'TOP HAT', 'WIG', 'LIPSTICK',
+
+  // Sports, toys & fun
+  'VOLLEYBALL', 'GOLF', 'BASEBALL', 'HOCKEY', 'BOXING', 'ARCHERY', 'SURFING', 'DIVING', 'ROWING',
+  'WRESTLING', 'YOGA', 'TREADMILL', 'DUMBBELL', 'JIGSAW', 'RATTLE', 'BUBBLES', 'PINATA',
+  'FERRIS WHEEL', 'ROLLER COASTER', 'MERRY-GO-ROUND', 'SANDCASTLE', 'SNOWBALL', 'DOMINO', 'MARBLES',
+  'PUPPET', 'SNOWBOARD', 'DARTBOARD', 'TARGET', 'HOURGLASS',
+
+  // Music
+  'XYLOPHONE', 'HARP', 'ACCORDION', 'SAXOPHONE', 'TAMBOURINE', 'TABLA', 'SITAR', 'MUSIC NOTE',
+
+  // Jobs & people
+  'PILOT', 'FIREFIGHTER', 'POLICEMAN', 'BAKER', 'PAINTER', 'ARTIST', 'DANCER', 'SINGER',
+  'MAGICIAN', 'SOLDIER', 'DETECTIVE', 'JUDGE', 'SAILOR', 'FISHERMAN', 'CARPENTER', 'PLUMBER',
+  'BARBER', 'POSTMAN', 'GIANT', 'GENIE', 'WITCH', 'VAMPIRE', 'ZOMBIE', 'MUMMY',
+
+  // Tech
+  'WIFI', 'EMAIL', 'TABLET', 'PRINTER', 'DRONE', 'JOYSTICK', 'SMARTWATCH', 'CHARGER',
+  'SOLAR PANEL', 'ANTENNA', 'SATELLITE DISH', 'MOBILE TOWER', 'SMARTPHONE',
+
+  // Fantasy & adventure
+  'BROOMSTICK', 'CAULDRON', 'TRIDENT', 'CATAPULT', 'CANNON', 'ARMOR', 'THRONE', 'DRAWBRIDGE',
+  'TOTEM', 'BOMB', 'TOMBSTONE', 'TREASURE CHEST', 'PIRATE SHIP', 'SPACE SUIT',
+
+  // Symbols
+  'QUESTION MARK', 'THUMBS UP', 'PEACE SIGN', 'FOOTPRINT', 'FINGERPRINT', 'LIGHTNING BOLT',
+  'CROSS', 'INFINITY', 'SPEECH BUBBLE', 'EXCLAMATION MARK',
+
+  // Actions
+  'JUGGLING', 'SHOPPING', 'DIGGING', 'SWEEPING', 'KNITTING', 'SKIPPING', 'PUSHING', 'PULLING',
+  'HUGGING', 'WHISPERING', 'SHOUTING', 'THINKING', 'WINKING', 'CHEWING', 'FALLING', 'LIFTING',
+  'CARRYING', 'SLEEPWALKING', 'HICCUPS',
+
+  // Places & landmarks
+  'BAKERY', 'PHARMACY', 'SALON', 'GYM', 'STADIUM', 'THEATER', 'FACTORY', 'MINE', 'WELL',
+  'OBSERVATORY', 'TAJ MAHAL', 'EIFFEL TOWER', 'STATUE OF LIBERTY', 'GREAT WALL', 'LEANING TOWER'
 ];
+
+const normalizeAnswer = (val) => val.trim().toLowerCase();
+
+const getThreeWords = (usedWordsSet) => {
+  const available = WORDS.filter(w => !usedWordsSet.has(w));
+  const pool = available.length >= 3 ? available : WORDS;
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 3);
+};
 
 const DrawingGame = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [gameState, setGameState] = useState('playing');
-  const [gamePhase, setGamePhase] = useState('drawing'); // 'drawing' or 'guessing'
+
+  const getSavedState = () => {
+    try { return JSON.parse(localStorage.getItem('drawingGameState')); } catch (e) { return null; }
+  };
+  const rawState = location.state?.roomCode ? location.state : getSavedState();
+  const gameSettings = rawState?.gameSettings;
+  const roomCode = rawState?.roomCode;
+  const currentPlayerData = rawState?.currentPlayer;
+
+  const [players, setPlayers] = useState(
+    (rawState?.players || []).slice().sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0))
+  );
+  const [roundStatus, setRoundStatus] = useState('choosing_word'); // choosing_word | drawing | round_finished
   const [currentDrawerIndex, setCurrentDrawerIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(60);
   const [round, setRound] = useState(1);
   const [totalRounds, setTotalRounds] = useState(3);
   const [currentWord, setCurrentWord] = useState('');
+  const [wordOptions, setWordOptions] = useState([]);
   const [guessInput, setGuessInput] = useState('');
   const [chatMessages, setChatMessages] = useState([]);
-  const [localMessages, setLocalMessages] = useState([]);
   const [toasts, setToasts] = useState([]);
-  const [usedWords, setUsedWords] = useState(new Set());
-  const [correctGuessers, setCorrectGuessers] = useState([]);
   const [roundEnded, setRoundEnded] = useState(false);
-  const [revealedLetters, setRevealedLetters] = useState({}); // {playerId: {0: 'B', 3: 'T', ...}}
-  const [playerWords, setPlayerWords] = useState({}); // {playerId: 'WORD'}
-  const [playerDrawings, setPlayerDrawings] = useState({}); // {playerId: [drawData]}
+  const [revealedLetters, setRevealedLetters] = useState({});
+  const [inputFocused, setInputFocused] = useState(false);
+  const [playersExpanded, setPlayersExpanded] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [alreadyGuessedCorrectly, setAlreadyGuessedCorrectly] = useState(false);
+  const [myCorrectPoints, setMyCorrectPoints] = useState(0);
 
-  // Recover state from location.state (normal) or localStorage (page refresh)
-  const getSavedState = () => {
-    try { return JSON.parse(localStorage.getItem('drawingGameState')); } catch (e) { return null; }
-  };
-  const rawState = (location.state?.roomCode) ? location.state : getSavedState();
-  const gameSettings = rawState?.gameSettings;
-  const roomCode = rawState?.roomCode;
-  const currentPlayerData = rawState?.currentPlayer;
-  const [players, setPlayers] = useState(
-    (rawState?.players || []).slice().sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0))
-  );
-
+  const roundEndedRef = useRef(false);
+  const playersRef2 = useRef(players);
+  const totalRoundsRef = useRef(3);
+  const lastRoundStartTimeRef = useRef(0);
+  const isDrawingRef = useRef(false);
+  const guessListRef = useRef(null);
 
   const currentPlayer = currentPlayerData || (players.length > 0 ? players[0] : null);
-  
-  // Get the current drawer's info from the players array using currentDrawerIndex
   const currentDrawer = players[currentDrawerIndex];
   const currentDrawerId = currentDrawer?.id;
   const currentDrawerName = currentDrawer?.name;
-  
-  // More reliable check: compare current player's ID with drawer's ID, also check by name as fallback
   const isCurrentPlayerDrawing = currentPlayer && (
-    (currentDrawerId && currentPlayer.id === currentDrawerId) || 
+    (currentDrawerId && currentPlayer.id === currentDrawerId) ||
     (currentDrawerName && currentPlayer.name === currentDrawerName)
   );
 
-  // Refs to always have latest values inside async callbacks (avoid stale closures)
-  const gamePhaseRef = useRef(gamePhase);
-  const currentDrawerIndexRef = useRef(currentDrawerIndex);
-  const roundRef = useRef(round);
-  const roundEndedRef = useRef(roundEnded);
-  const playersRef2 = useRef(players);
-
-  useEffect(() => { gamePhaseRef.current = gamePhase; }, [gamePhase]);
-  useEffect(() => { currentDrawerIndexRef.current = currentDrawerIndex; }, [currentDrawerIndex]);
-  useEffect(() => { roundRef.current = round; }, [round]);
-  useEffect(() => { roundEndedRef.current = roundEnded; }, [roundEnded]);
   useEffect(() => { playersRef2.current = players; }, [players]);
+  useEffect(() => { roundEndedRef.current = roundEnded; }, [roundEnded]);
 
-  const totalRoundsRef = useRef(3);
-  // Tracks roundStartTime so we only reset the timer when a genuinely new round begins
-  const lastRoundStartTimeRef = useRef(0);
-
-  // Persist state to localStorage so the game can recover after a page refresh
+  // Persist state to localStorage
   useEffect(() => {
     if (location.state?.roomCode) {
       localStorage.setItem('drawingGameState', JSON.stringify({
@@ -128,43 +148,42 @@ const DrawingGame = () => {
     }
   }, [location.state?.roomCode, location.state?.currentPlayer, location.state?.players, location.state?.gameSettings]);
 
-  // Utility functions
-  const getRandomWord = useCallback(() => {
-    const availableWords = WORDS.filter(word => !usedWords.has(word));
-    if (availableWords.length === 0) {
-      setUsedWords(new Set());
-      return WORDS[Math.floor(Math.random() * WORDS.length)];
-    }
-    const word = availableWords[Math.floor(Math.random() * availableWords.length)];
-    setUsedWords(prev => new Set([...prev, word]));
-    return word;
-  }, [usedWords]);
+  // Visual viewport handler for mobile keyboard
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const handleResize = () => {
+      document.documentElement.style.setProperty('--viewport-height', `${viewport.height}px`);
+    };
+    viewport.addEventListener('resize', handleResize);
+    viewport.addEventListener('scroll', handleResize);
+    handleResize();
+    return () => {
+      viewport.removeEventListener('resize', handleResize);
+      viewport.removeEventListener('scroll', handleResize);
+    };
+  }, []);
 
-  const showToast = (message, type = 'success') => {
+  const showToast = useCallback((message, type = 'success') => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(toast => toast.id !== id));
-    }, 3000);
-  };
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+  }, []);
 
-  const updatePlayerScore = useCallback((playerId, points) => {
-    if (!roomCode) return;
-    const playerScoreRef = ref(db, `rooms/${roomCode}/players/${playerId}/score`);
-    get(playerScoreRef).then(snapshot => {
-      const currentScore = snapshot.val() || 0;
-      set(playerScoreRef, currentScore + points);
-    });
-  }, [roomCode]);
+  // Auto-scroll guesses
+  useEffect(() => {
+    if (guessListRef.current) {
+      guessListRef.current.scrollTo({ top: guessListRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, [chatMessages]);
 
   const remoteLastPosRef = useRef({ x: 0, y: 0 });
-  const isDrawingRef = useRef(false); // tracks if drawer is mid-stroke
+  const permanentCanvasRef = useRef(null);
 
   const drawOnCanvas = useCallback((data) => {
-    const canvas = document.querySelector('canvas');
+    const canvas = permanentCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-
     if (data.type === 'start') {
       ctx.strokeStyle = data.color;
       ctx.lineWidth = data.size;
@@ -186,15 +205,73 @@ const DrawingGame = () => {
       ctx.beginPath();
       ctx.moveTo(midX, midY);
       remoteLastPosRef.current = { x: data.x, y: data.y };
+    } else if (data.type === 'circle') {
+      ctx.strokeStyle = data.color;
+      ctx.lineWidth = data.size;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(data.cx, data.cy, data.r, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (data.type === 'ellipse') {
+      ctx.strokeStyle = data.color;
+      ctx.lineWidth = data.size;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.ellipse(data.cx, data.cy, data.rx, data.ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (data.type === 'arc') {
+      ctx.strokeStyle = data.color;
+      ctx.lineWidth = data.size;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(data.cx, data.cy, data.r, data.startAngle, data.endAngle, data.anticlockwise);
+      ctx.stroke();
+    } else if (data.type === 'line') {
+      ctx.strokeStyle = data.color;
+      ctx.lineWidth = data.size;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(data.x1, data.y1);
+      ctx.lineTo(data.x2, data.y2);
+      ctx.stroke();
     } else if (data.type === 'clear') {
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
   }, []);
 
+  // Centralized round-finish: atomic, safe against multiple callers
+  const finishRound = useCallback(async () => {
+    if (!roomCode) return;
+    const gameStateRef = ref(db, `rooms/${roomCode}/gameState`);
+
+    // Atomically flip roundStatus — only first caller wins
+    let alreadyFinished = false;
+    await runTransaction(gameStateRef, (current) => {
+      if (!current) return current;
+      if (current.roundStatus !== 'drawing') { alreadyFinished = true; return; }
+      return { ...current, roundStatus: 'round_finished', roundEnded: true };
+    });
+    if (alreadyFinished) return;
+
+    // Award drawer points (once, inside same host client that won the transaction)
+    const snap = await get(gameStateRef);
+    const state = snap.val();
+    if (!state || state.drawerPointsAwarded) return;
+    const guessedCount = Object.keys(state.guessedPlayers || {}).length;
+    if (guessedCount > 0) {
+      const drawerPoints = guessedCount * 10;
+      const drawerId = playersRef2.current[state.currentDrawerIndex || 0]?.id;
+      if (drawerId) {
+        await runTransaction(ref(db, `rooms/${roomCode}/players/${drawerId}/score`), (cur) => (cur || 0) + drawerPoints);
+      }
+    }
+    await update(gameStateRef, { drawerPointsAwarded: true });
+  }, [roomCode]);
+
   const nextRound = useCallback(async () => {
     if (!roomCode || !currentPlayer?.isHost) return;
-
     const gameStateRef = ref(db, `rooms/${roomCode}/gameState`);
     const freshSnapshot = await get(gameStateRef);
     if (!freshSnapshot.exists()) return;
@@ -205,121 +282,107 @@ const DrawingGame = () => {
     const currentPlayers = playersRef2.current.slice().sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
     const totalRoundsInGame = freshState.totalRounds || totalRoundsRef.current;
 
-    // Calculate next drawer and round
     let nextDrawerIndex = (currentDrawerIdx + 1) % currentPlayers.length;
     let nextRoundNum = currentRoundNum;
+    if (nextDrawerIndex === 0) nextRoundNum = currentRoundNum + 1;
 
-    if (nextDrawerIndex === 0) {
-      nextRoundNum = currentRoundNum + 1;
-    }
-
-    // Check if game is over
     if (nextRoundNum > totalRoundsInGame) {
       await update(gameStateRef, { gameOver: true });
       return;
     }
 
-    // Assign a new word for the next drawer
-    const newWord = getRandomWord();
+    // Generate 3 word options for next drawer
+    const currentUsedWords = new Set(freshState.usedWords || []);
+    const options = getThreeWords(currentUsedWords);
 
-    // Reset drawing for the next turn
-    const currentDrawingRef = ref(db, `rooms/${roomCode}/drawing`);
-    await set(currentDrawingRef, null);
+    await set(ref(db, `rooms/${roomCode}/drawing`), null);
+    await set(ref(db, `rooms/${roomCode}/chat`), null);
 
     await update(gameStateRef, {
       currentDrawerIndex: nextDrawerIndex,
       currentRound: nextRoundNum,
-      currentWord: newWord,
+      currentWord: '',
+      wordOptions: options,
+      roundStatus: 'choosing_word',
       timeLeft: 60,
-      roundStartTime: Date.now(),
+      roundStartTime: null,
+      roundEndsAt: null,
       correctGuessers: [],
+      correctGuessCount: 0,
+      guessedPlayers: {},
       roundEnded: false,
       revealedLetters: {},
-      gamePhase: 'drawing' // Ensure we stay in drawing phase for standard play
+      drawerPointsAwarded: false,
     });
-  }, [roomCode, currentPlayer, getRandomWord]);
+  }, [roomCode, currentPlayer]);
 
+  // Initialize game state
   useEffect(() => {
     if (gameSettings?.rounds) {
-      const rounds = parseInt(gameSettings.rounds);
-      setTotalRounds(rounds);
-      totalRoundsRef.current = rounds;
+      const r = parseInt(gameSettings.rounds);
+      setTotalRounds(r);
+      totalRoundsRef.current = r;
     }
+    if (!roomCode || !currentPlayer?.isHost) return;
 
-    if (roomCode && currentPlayer?.isHost) {
-      const checkAndInitialize = async () => {
-        const gameStateRef = ref(db, `rooms/${roomCode}/gameState`);
-        const snapshot = await get(gameStateRef);
-
-        if (!snapshot.exists() || snapshot.val()?.gameOver) {
-          const sortedPlayers = players.slice().sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
-
-          const wordsForPlayers = {};
-          const usedWordsLocal = new Set();
-          sortedPlayers.forEach(player => {
-            let available = WORDS.filter(w => !usedWordsLocal.has(w));
-            if (available.length === 0) available = [...WORDS];
-            const word = available[Math.floor(Math.random() * available.length)];
-            usedWordsLocal.add(word);
-            wordsForPlayers[player.id] = word;
-          });
-
-          const firstWord = wordsForPlayers[sortedPlayers[0]?.id] || getRandomWord();
-
-          const rounds = parseInt(gameSettings?.rounds) || 3;
-
-          await set(gameStateRef, {
-            gamePhase: 'drawing',
-            currentRound: 1,
-            currentDrawerIndex: 0,
-            timeLeft: 60,
-            currentWord: firstWord,
-            playerWords: wordsForPlayers,
-            totalRounds: rounds,
-            roundStartTime: Date.now(),
-            correctGuessers: [],
-            roundEnded: false,
-            gameOver: false,
-            revealedLetters: {}
-          });
-        } else {
-          const existingState = snapshot.val();
-          if (existingState.totalRounds) {
-            totalRoundsRef.current = existingState.totalRounds;
-          }
-        }
-      };
-      checkAndInitialize();
-    }
-  }, [gameSettings, roomCode, currentPlayer, players, getRandomWord]);
-
-  useEffect(() => {
-    if (timeLeft > 0 && gameState === 'playing' && !roundEnded) {
-      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
-      return () => clearTimeout(timer);
-    } else if (timeLeft === 0 && currentPlayer?.isHost && !roundEnded) {
-      // Time up: host sets roundEnded: true in Firebase to trigger advance for everyone
-      if (correctGuessers.length === 0) {
-        showToast('Time up! No one guessed correctly.', 'info');
-      }
-      
+    const checkAndInitialize = async () => {
       const gameStateRef = ref(db, `rooms/${roomCode}/gameState`);
-      update(gameStateRef, { roundEnded: true });
-    }
-  }, [timeLeft, gameState, roundEnded, correctGuessers.length, currentPlayer, roomCode]);
+      const snapshot = await get(gameStateRef);
+      if (!snapshot.exists() || snapshot.val()?.gameOver) {
+        const rounds = parseInt(gameSettings?.rounds) || 3;
+        const options = getThreeWords(new Set());
+        await set(gameStateRef, {
+          roundStatus: 'choosing_word',
+          currentRound: 1,
+          currentDrawerIndex: 0,
+          timeLeft: 60,
+          currentWord: '',
+          wordOptions: options,
+          totalRounds: rounds,
+          roundStartTime: null,
+          roundEndsAt: null,
+          correctGuessers: [],
+          correctGuessCount: 0,
+          guessedPlayers: {},
+          roundEnded: false,
+          gameOver: false,
+          revealedLetters: {},
+          usedWords: [],
+          drawerPointsAwarded: false,
+        });
+      }
+    };
+    checkAndInitialize();
+  }, [gameSettings, roomCode, currentPlayer]);
 
-  // Automatically advance round when roundEnded is true
+  // Server-synced timer: calculate from roundEndsAt
+  useEffect(() => {
+    if (roundStatus !== 'drawing') return;
+    const interval = setInterval(() => {
+      const gameStateRef = ref(db, `rooms/${roomCode}/gameState`);
+      get(gameStateRef).then(snap => {
+        const data = snap.val();
+        if (!data?.roundEndsAt) return;
+        const remaining = Math.max(0, Math.round((data.roundEndsAt - Date.now()) / 1000));
+        setTimeLeft(remaining);
+        if (remaining === 0 && !roundEndedRef.current) {
+          finishRound();
+        }
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [roundStatus, roomCode, currentPlayer, finishRound]);
+
+  // Auto-advance round when roundEnded
   useEffect(() => {
     if (roundEnded && currentPlayer?.isHost) {
-      const advanceNextRound = () => {
+      roundEndedRef.current = true;
+      const timer = setTimeout(() => {
         if (roundEndedRef.current) {
           nextRound();
           roundEndedRef.current = false;
         }
-      };
-
-      roundEndedRef.current = true;
-      const timer = setTimeout(advanceNextRound, 2000);
+      }, 3000);
       return () => clearTimeout(timer);
     }
   }, [roundEnded, currentPlayer, nextRound]);
@@ -329,236 +392,311 @@ const DrawingGame = () => {
     if (!roomCode) return;
 
     const playersRef = ref(db, `rooms/${roomCode}/players`);
-    const unsubscribePlayers = onValue(playersRef, (snapshot) => {
-      const data = snapshot.val();
+    const unsubPlayers = onValue(playersRef, (snap) => {
+      const data = snap.val();
       if (data) {
-        const playersList = Object.values(data)
+        const list = Object.values(data)
           .map(p => ({ ...p, score: p.score || 0 }))
           .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
-        console.log('Players updated:', playersList.map(p => ({ id: p.id, name: p.name, joinedAt: p.joinedAt })));
-        setPlayers(playersList);
+        setPlayers(list);
+
+        // Re-check round end when a player leaves mid-round
+        const gsRef = ref(db, `rooms/${roomCode}/gameState`);
+        get(gsRef).then(gsSnap => {
+          const gs = gsSnap.val();
+          if (!gs || gs.roundStatus !== 'drawing') return;
+          const drawerId = list[gs.currentDrawerIndex || 0]?.id;
+          const eligible = list.filter(p => p.id !== drawerId);
+          const guessedCount = Object.keys(gs.guessedPlayers || {}).length;
+          if (eligible.length > 0 && guessedCount >= eligible.length) {
+            finishRound();
+          }
+        });
       }
     });
 
     const drawingRef = ref(db, `rooms/${roomCode}/drawing`);
-    const unsubscribeDrawing = onValue(drawingRef, (snapshot) => {
-      const data = snapshot.val();
-      // If the current player is drawing and is mid-stroke, skip the redraw
-      // to avoid clearing their canvas while they're actively drawing
+    const unsubDrawing = onValue(drawingRef, (snap) => {
       if (isDrawingRef.current) return;
-
-      const canvas = document.querySelector('canvas');
+      const canvas = permanentCanvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
-
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      if (data) {
-        Object.values(data).forEach(drawData => drawOnCanvas(drawData));
-      }
+      const data = snap.val();
+      if (data) Object.values(data).forEach(d => drawOnCanvas(d));
     });
 
     const gameStateRef = ref(db, `rooms/${roomCode}/gameState`);
-    const unsubscribeGameState = onValue(gameStateRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        console.log('GameState updated:', JSON.stringify(data, null, 2));
-        
-        setGamePhase(data.gamePhase || 'drawing');
-        setRound(data.currentRound || 1);
-        setCurrentDrawerIndex(data.currentDrawerIndex || 0);
-        
-        // Get the word - ensure it's always set
-        const newWord = data.currentWord || '';
-        console.log('Setting currentWord:', newWord, 'for round:', data.currentRound);
-        setCurrentWord(newWord);
-        
-        if (data.roundStartTime && data.roundStartTime !== lastRoundStartTimeRef.current) {
+    const unsubGameState = onValue(gameStateRef, (snap) => {
+      const data = snap.val();
+      if (!data) return;
+
+      const newStatus = data.roundStatus || 'choosing_word';
+      setRoundStatus(newStatus);
+      setRound(data.currentRound || 1);
+      setCurrentDrawerIndex(data.currentDrawerIndex || 0);
+      setCurrentWord(data.currentWord || '');
+      setWordOptions(data.wordOptions || []);
+      setRevealedLetters(data.revealedLetters || {});
+      if (data.totalRounds) totalRoundsRef.current = data.totalRounds;
+
+      // Sync timer from server
+      if (newStatus === 'drawing' && data.roundEndsAt) {
+        if (data.roundStartTime !== lastRoundStartTimeRef.current) {
           lastRoundStartTimeRef.current = data.roundStartTime;
-          const maxTime = 60;
-          const elapsed = Math.floor((Date.now() - data.roundStartTime) / 1000);
-          setTimeLeft(Math.max(0, maxTime - elapsed));
-          setLocalMessages([]);
-          console.log('New round started, word:', newWord);
+          const remaining = Math.max(0, Math.round((data.roundEndsAt - Date.now()) / 1000));
+          setTimeLeft(remaining);
         }
-        
-        setCorrectGuessers(data.correctGuessers || []);
-        setRevealedLetters(data.revealedLetters || {});
-        if (data.totalRounds) {
-          totalRoundsRef.current = data.totalRounds;
-        }
-        if (data.playerWords) {
-          setPlayerWords(data.playerWords);
-        }
-        if (data.gameOver) {
-          navigate('/gameover', {
-            state: { 
-              players: players.map(p => ({ ...p, score: p.score || 0 })),
-              roomCode,
-              gameSettings,
-              currentPlayer
-            }
-          });
-        }
-        if (data.roundEnded) {
-          setRoundEnded(true);
-        } else {
-          setRoundEnded(false);
-          roundEndedRef.current = false;
-        }
+      } else if (newStatus === 'choosing_word') {
+        setTimeLeft(60);
+      }
+
+      // Check if current player already guessed correctly this round
+      if (currentPlayer && data.guessedPlayers?.[currentPlayer.id]) {
+        setAlreadyGuessedCorrectly(true);
+        setMyCorrectPoints(data.guessedPlayers[currentPlayer.id].points || 0);
+      } else {
+        setAlreadyGuessedCorrectly(false);
+        setMyCorrectPoints(0);
+      }
+
+      if (data.roundEnded) {
+        setRoundEnded(true);
+      } else {
+        setRoundEnded(false);
+        roundEndedRef.current = false;
+      }
+
+      if (data.gameOver) {
+        navigate('/gameover', {
+          state: {
+            players: playersRef2.current.map(p => ({ ...p, score: p.score || 0 })),
+            roomCode,
+            gameSettings,
+            currentPlayer
+          }
+        });
       }
     });
 
     const chatRef = ref(db, `rooms/${roomCode}/chat`);
-    const unsubscribeChat = onValue(chatRef, (snapshot) => {
-      const data = snapshot.val();
+    const unsubChat = onValue(chatRef, (snap) => {
+      const data = snap.val();
       if (data) {
-        const messages = Object.values(data).sort((a, b) => b.timestamp - a.timestamp);
+        const messages = Object.values(data).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
         setChatMessages(messages);
+      } else {
+        setChatMessages([]);
       }
     });
 
     return () => {
-      unsubscribePlayers();
-      unsubscribeDrawing();
-      unsubscribeGameState();
-      unsubscribeChat();
+      unsubPlayers();
+      unsubDrawing();
+      unsubGameState();
+      unsubChat();
     };
-  }, [roomCode, navigate, players, gameSettings, currentPlayer, drawOnCanvas]);
+  }, [roomCode, navigate, gameSettings, currentPlayer, drawOnCanvas]);
 
-  const sendDrawing = (drawData) => {
+  // Drawer selects a word
+  const handleWordSelect = useCallback(async (word) => {
+    if (!roomCode || !word) return;
+    const gameStateRef = ref(db, `rooms/${roomCode}/gameState`);
+
+    // Use transaction to prevent double-selection
+    await runTransaction(gameStateRef, (current) => {
+      if (!current) return current;
+      if (current.roundStatus !== 'choosing_word') return; // abort
+      const now = Date.now();
+      const endsAt = now + 60000;
+      return {
+        ...current,
+        currentWord: word,
+        roundStatus: 'drawing',
+        roundStartTime: now,
+        roundEndsAt: endsAt,
+        timeLeft: 60,
+        wordOptions: [],
+        usedWords: [...(current.usedWords || []), word],
+      };
+    });
+  }, [roomCode]);
+
+  const sendDrawing = useCallback((drawData) => {
     if (!roomCode) return;
     const drawingRef = ref(db, `rooms/${roomCode}/drawing`);
-    push(drawingRef, {
-      ...drawData,
-      player: currentPlayer?.name,
-      timestamp: serverTimestamp()
-    });
-  };
+    push(drawingRef, { ...drawData, player: currentPlayer?.name, timestamp: serverTimestamp() });
+  }, [roomCode, currentPlayer]);
 
-  const sendGuess = async () => {
-    if (!guessInput.trim() || !roomCode || !currentPlayer) return;
+  // Atomic correct-guess scoring
+  const sendGuess = useCallback(async () => {
+    if (isSending) return;
+    const trimmed = guessInput.trim();
+    if (!trimmed || !roomCode || !currentPlayer) return;
+    if (isCurrentPlayerDrawing) return;
+    if (alreadyGuessedCorrectly) return;
 
-    const guess = guessInput.trim().toUpperCase();
-    const correctWord = currentWord;
+    setIsSending(true);
+    setGuessInput('');
+
+    const guess = normalizeAnswer(trimmed);
+    const correctWord = normalizeAnswer(currentWord);
     const isCorrect = guess === correctWord;
 
-    // Check if player already guessed correctly
-    if (isCorrect && correctGuessers.includes(currentPlayer.id)) {
-      showToast('You already guessed correctly!', 'warning');
-      setGuessInput('');
-      return;
-    }
-
     if (isCorrect) {
-      // Award points to guesser
-      updatePlayerScore(currentPlayer.id, 10);
+      const gameStateRef = ref(db, `rooms/${roomCode}/gameState`);
+      let earnedPoints = 10;
 
-      // Award points to the drawer
-      const drawerId = players[currentDrawerIndex]?.id;
-      if (drawerId && drawerId !== currentPlayer.id) {
-        updatePlayerScore(drawerId, 5);
-      }
+      await runTransaction(gameStateRef, (current) => {
+        if (!current) return current;
+        if (current.roundStatus !== 'drawing') return current;
+        const guessedPlayers = current.guessedPlayers || {};
+        if (guessedPlayers[currentPlayer.id]) return current;
+        const count = current.correctGuessCount || 0;
+        const points = Math.max(10, 100 - count * 10);
+        earnedPoints = points;
+        return {
+          ...current,
+          correctGuessCount: count + 1,
+          correctGuessers: [...(current.correctGuessers || []), currentPlayer.id],
+          guessedPlayers: { ...guessedPlayers, [currentPlayer.id]: { position: count, points } }
+        };
+      });
 
-      // Push correct guess to Firebase chat so all players see it
+      const playerScoreRef = ref(db, `rooms/${roomCode}/players/${currentPlayer.id}/score`);
+      await runTransaction(playerScoreRef, (cur) => (cur || 0) + earnedPoints);
+
       const chatRef = ref(db, `rooms/${roomCode}/chat`);
       push(chatRef, {
         id: `correct-${Date.now()}`,
         player: currentPlayer.name,
         playerId: currentPlayer.id,
-        message: guessInput.trim(),
+        message: '✅ Guessed correctly!',
+        points: earnedPoints,
         time: new Date().toLocaleTimeString(),
         type: 'correct',
-        points: 10,
         timestamp: Date.now()
       });
 
-      // Add to correct guessers and end round
-      const newCorrectGuessers = [...correctGuessers, currentPlayer.id];
-      const gameStateRef = ref(db, `rooms/${roomCode}/gameState`);
-      await update(gameStateRef, {
-        correctGuessers: newCorrectGuessers,
-        roundEnded: true
-      });
+      setAlreadyGuessedCorrectly(true);
+      setMyCorrectPoints(earnedPoints);
+      showToast(`Correct! +${earnedPoints} points`, 'success');
 
-      setCorrectGuessers(newCorrectGuessers);
-      setRoundEnded(true);
+      // Check eligibility for early round end
+      const snap = await get(gameStateRef);
+      const state = snap.val();
+      if (!state) { setIsSending(false); return; }
+
+      const allPlayers = playersRef2.current;
+      const drawerId = allPlayers[state.currentDrawerIndex || 0]?.id;
+      const eligibleGuessers = allPlayers.filter(p => p.id !== drawerId);
+      const eligibleCount = eligibleGuessers.length;
+      const guessedCount = Object.keys(state.guessedPlayers || {}).length;
+      const everyoneGuessed = eligibleCount > 0 && guessedCount >= eligibleCount;
+
+      if (everyoneGuessed) {
+        await finishRound();
+      }
     } else {
-      // Wrong guess: push to Firebase chat so all players see it
       const chatRef = ref(db, `rooms/${roomCode}/chat`);
       push(chatRef, {
         id: `guess-${Date.now()}`,
         player: currentPlayer.name,
         playerId: currentPlayer.id,
-        message: guessInput.trim(),
+        message: trimmed,
         time: new Date().toLocaleTimeString(),
         type: 'guess',
         timestamp: Date.now()
       });
 
-      // Check for correct letter positions
-      const newRevealedLetters = { ...revealedLetters };
-      
-      if (!newRevealedLetters[currentPlayer.id]) {
-        newRevealedLetters[currentPlayer.id] = {};
-      }
-      
-      let hasNewReveals = false;
+      // Reveal correctly positioned letters
+      const newRevealed = { ...revealedLetters };
+      if (!newRevealed[currentPlayer.id]) newRevealed[currentPlayer.id] = {};
+      let hasNew = false;
       for (let i = 0; i < Math.min(guess.length, correctWord.length); i++) {
-        if (guess[i] === correctWord[i] && !newRevealedLetters[currentPlayer.id][i]) {
-          newRevealedLetters[currentPlayer.id][i] = correctWord[i];
-          hasNewReveals = true;
+        if (guess[i] === correctWord[i] && !newRevealed[currentPlayer.id][i]) {
+          newRevealed[currentPlayer.id][i] = currentWord[i];
+          hasNew = true;
         }
       }
-      
-      if (hasNewReveals) {
-        setRevealedLetters(newRevealedLetters);
-        
-        // Update Firebase
-        const gameStateRef = ref(db, `rooms/${roomCode}/gameState`);
-        await update(gameStateRef, { revealedLetters: newRevealedLetters });
-        
+      if (hasNew) {
+        setRevealedLetters(newRevealed);
+        await update(ref(db, `rooms/${roomCode}/gameState`), { revealedLetters: newRevealed });
         showToast('Correct letter position revealed!', 'info');
       }
     }
 
-    setGuessInput('');
+    setIsSending(false);
+  }, [isSending, guessInput, roomCode, currentPlayer, isCurrentPlayerDrawing, alreadyGuessedCorrectly, currentWord, revealedLetters, showToast, finishRound]);
+
+  const getWordHint = (word, playerId) => {
+    if (!word) return '';
+    const playerRevealed = revealedLetters[playerId] || {};
+    return word.split('').map((char, i) => {
+      if (char === ' ') return '  ';
+      return playerRevealed[i] ? playerRevealed[i] : '_';
+    }).join(' ');
   };
 
   return (
-    <div className={styles.gameContainer}>
+    <div className={`${styles.gameContainer} ${inputFocused ? styles.keyboardOpen : ''}`}>
+      {/* Word choice overlay for drawer */}
+      {roundStatus === 'choosing_word' && isCurrentPlayerDrawing && wordOptions.length > 0 && (
+        <WordChoice words={wordOptions} onSelect={handleWordSelect} drawerName={currentDrawerName} />
+      )}
+
       <div className={styles.gameWrapper}>
+        {/* Compact mobile header */}
         <GameHeader
           round={round}
           totalRounds={totalRounds}
           playersLength={players.length}
           timeLeft={timeLeft}
+          roundStatus={roundStatus}
+          inputFocused={inputFocused}
+          currentDrawerName={currentDrawerName}
+          currentWord={currentWord}
+          isDrawer={isCurrentPlayerDrawing}
         />
 
-        <div className={styles.gameGrid}>
-          <div>
-            <PlayerList 
-              players={players} 
+        <div className={`${styles.gameGrid} ${inputFocused ? styles.gameGridFocused : ''}`}>
+          {/* Players panel — collapsible on mobile */}
+          <div className={`${styles.playerPanelWrapper} ${inputFocused ? styles.hiddenOnFocus : ''}`}>
+            <PlayerList
+              players={players}
               currentDrawerIndex={currentDrawerIndex}
+              expanded={playersExpanded}
+              onToggle={() => setPlayersExpanded(p => !p)}
             />
           </div>
 
+          {/* Canvas panel */}
           <div>
-            <GameCanvas
-              currentWord={currentWord}
-              gamePhase={gamePhase}
-              currentDrawerName={currentDrawer?.name || players[currentDrawerIndex]?.name || 'Unknown'}
-              currentDrawerId={currentDrawer?.id || players[currentDrawerIndex]?.id}
-              isCurrentPlayerDrawing={isCurrentPlayerDrawing}
-              onSendDrawing={sendDrawing}
-              revealedLetters={revealedLetters}
-              currentPlayerId={currentPlayer?.id}
-              currentPlayerName={currentPlayer?.name}
-              round={round}
-              isDrawingRef={isDrawingRef}
-            />
+            {roundStatus === 'choosing_word' && !isCurrentPlayerDrawing ? (
+              <div className={styles.canvasPanel}>
+                <WaitingForWord drawerName={currentDrawerName} />
+              </div>
+            ) : (
+              <GameCanvas
+                currentWord={currentWord}
+                roundStatus={roundStatus}
+                currentDrawerName={currentDrawerName}
+                currentDrawerId={currentDrawerId}
+                isCurrentPlayerDrawing={isCurrentPlayerDrawing}
+                onSendDrawing={sendDrawing}
+                revealedLetters={revealedLetters}
+                currentPlayerId={currentPlayer?.id}
+                currentPlayerName={currentPlayer?.name}
+                round={round}
+                isDrawingRef={isDrawingRef}
+                getWordHint={getWordHint}
+                permanentCanvasRef={permanentCanvasRef}
+              />
+            )}
           </div>
 
+          {/* Chat / Guess panel */}
           <div>
             <ChatPanel
               messages={chatMessages}
@@ -567,12 +705,18 @@ const DrawingGame = () => {
               setGuessInput={setGuessInput}
               sendGuess={sendGuess}
               players={players}
+              isSending={isSending}
+              alreadyGuessedCorrectly={alreadyGuessedCorrectly}
+              myCorrectPoints={myCorrectPoints}
+              roundStatus={roundStatus}
+              guessListRef={guessListRef}
+              onInputFocus={() => setInputFocused(true)}
+              onInputBlur={() => setInputFocused(false)}
             />
           </div>
         </div>
       </div>
 
-      {/* Toast Notifications */}
       <div className={styles.toastContainer}>
         {toasts.map(toast => (
           <Toast key={toast.id} message={toast.message} type={toast.type} />
@@ -582,267 +726,544 @@ const DrawingGame = () => {
   );
 };
 
-const GameHeader = ({ round, totalRounds, playersLength, timeLeft }) => {
-  const getPhaseText = () => {
-    return `Round ${round} of ${totalRounds}`;
-  };
-  
+const GameHeader = ({ round, totalRounds, playersLength, timeLeft, roundStatus, inputFocused, currentDrawerName, currentWord, isDrawer }) => {
+  const hint = currentWord
+    ? currentWord.split('').map(c => c === ' ' ? '  ' : '_').join(' ')
+    : '';
+
+  if (inputFocused) {
+    return (
+      <div className={styles.headerCompact}>
+        <span className={styles.headerCompactDrawer}>
+          🎨 {currentDrawerName}
+        </span>
+        <span className={styles.headerCompactHint}>
+          {isDrawer ? currentWord : hint}
+        </span>
+        <span className={`${styles.headerCompactTimer} ${timeLeft <= 10 ? styles.timerWarning : ''}`}>
+          {timeLeft}s
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.header}>
       <div className={styles.headerContent}>
         <div className={styles.headerLeft}>
-          <div className={styles.headerIcon}>
-            <Trophy />
-          </div>
+          <div className={styles.headerIcon}><Trophy /></div>
           <div>
             <h1 className={styles.headerTitle}>Guess The Image</h1>
-            <p className={styles.headerSubtitle}>{getPhaseText()}</p>
+            <p className={styles.headerSubtitle}>Round {round} of {totalRounds} · {playersLength} players</p>
           </div>
         </div>
-
         <div className={styles.headerRight}>
-          <div className={styles.timerBox}>
-            <Clock />
-            <span className={`${styles.timerText} ${timeLeft <= 10 ? styles.timerWarning : ''}`}>
-              {timeLeft}s
-            </span>
-          </div>
+          {roundStatus === 'drawing' && (
+            <div className={styles.timerBox}>
+              <Clock />
+              <span className={`${styles.timerText} ${timeLeft <= 10 ? styles.timerWarning : ''}`}>
+                {timeLeft}s
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
 
-const PlayerList = ({ players, currentDrawerIndex }) => {
-  const getPlayerLabel = (index) => {
-    if (index === currentDrawerIndex) {
-      return ' ✏️ Drawing';
-    }
-    return '';
-  };
-  
-  const isActivePlayer = (index) => {
-    return index === currentDrawerIndex;
-  };
-  
-  return (
-    <div className={styles.playerPanel}>
-      <div className={styles.playerHeader}>
-        <Users />
-        <h2 className={styles.playerTitle}>Players</h2>
-      </div>
-      
-      <div className={styles.playerList}>
-        {players.map((player, index) => (
-          <div
-            key={player.id}
-            className={`${styles.playerItem} ${
-              isActivePlayer(index) ? styles.playerItemActive : styles.playerItemInactive
-            }`}
-          >
-            <div className={styles.playerInfo}>
-              <span className={styles.playerAvatar}>{player.avatar}</span>
-              <div>
-                <p className={`${styles.playerName} ${isActivePlayer(index) ? styles.playerNameActive : ''}`}>
-                  {player.name}
-                  {getPlayerLabel(index)}
-                </p>
-                <p className={styles.playerScore}>{player.score || 0} points</p>
-              </div>
+const PlayerList = ({ players, currentDrawerIndex, expanded, onToggle }) => (
+  <div className={styles.playerPanel}>
+    <button className={styles.playerHeader} onClick={onToggle}>
+      <Users />
+      <h2 className={styles.playerTitle}>Players ({players.length})</h2>
+      <span className={styles.playerToggle}>{expanded ? '▲' : '▼'}</span>
+    </button>
+    <div className={`${styles.playerList} ${expanded ? styles.playerListExpanded : styles.playerListCollapsed}`}>
+      {players.map((player, index) => (
+        <div
+          key={player.id}
+          className={`${styles.playerItem} ${index === currentDrawerIndex ? styles.playerItemActive : styles.playerItemInactive}`}
+        >
+          <div className={styles.playerInfo}>
+            <span className={styles.playerAvatar}>{player.avatar}</span>
+            <div>
+              <p className={`${styles.playerName} ${index === currentDrawerIndex ? styles.playerNameActive : ''}`}>
+                {player.name}{index === currentDrawerIndex ? ' ✏️' : ''}
+              </p>
+              <p className={styles.playerScore}>{player.score || 0} pts</p>
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
-  );
+  </div>
+);
+
+const QS = {
+  holdMs: 500,
+  holdTolerance: 6,
+  minShapeDist: 10,
+  lineDeviationThreshold: 0.06,
+  closeLoopThreshold: 0.22,
+  circleAspectThreshold: 0.82,
+  ellipseFitThreshold: 0.28,
+  arcCurvatureThreshold: 0.55,
+  minConfidence: 0.60,
+  minPoints: 5,
 };
 
-const GameCanvas = ({ 
-  currentWord, 
-  gamePhase,
-  currentDrawerName, 
-  currentDrawerId,
-  isCurrentPlayerDrawing, 
-  onSendDrawing,
-  revealedLetters,
-  currentPlayerId,
-  currentPlayerName,
-  round,
-  isDrawingRef
+function ptDist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function distFromLine(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return ptDist(p, a);
+  const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+function boundingBox(pts) {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+  }
+  return { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY };
+}
+
+function curvatureConsistency(pts) {
+  let pos = 0, neg = 0;
+  for (let i = 0; i < pts.length - 2; i++) {
+    const v1x = pts[i+1].x - pts[i].x, v1y = pts[i+1].y - pts[i].y;
+    const v2x = pts[i+2].x - pts[i+1].x, v2y = pts[i+2].y - pts[i+1].y;
+    const cross = v1x * v2y - v1y * v2x;
+    if (Math.hypot(v1x, v1y) < 1.5) continue;
+    if (cross > 0) pos++; else if (cross < 0) neg++;
+  }
+  const total = pos + neg;
+  return total === 0 ? 0 : Math.max(pos, neg) / total;
+}
+
+function circleFrom3(p1, p2, p3) {
+  const ax = p1.x, ay = p1.y, bx = p2.x, by = p2.y, cx = p3.x, cy = p3.y;
+  const D = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+  if (Math.abs(D) < 1e-6) return null;
+  const ux = ((ax*ax+ay*ay)*(by-cy) + (bx*bx+by*by)*(cy-ay) + (cx*cx+cy*cy)*(ay-by)) / D;
+  const uy = ((ax*ax+ay*ay)*(cx-bx) + (bx*bx+by*by)*(ax-cx) + (cx*cx+cy*cy)*(bx-ax)) / D;
+  return { cx: ux, cy: uy, r: Math.hypot(ax - ux, ay - uy) };
+}
+
+function detectQuickShape(pts) {
+  if (pts.length < QS.minPoints) return { type: 'curve' };
+  const start = pts[0], end = pts[pts.length - 1];
+  const bb = boundingBox(pts);
+  const bbSize = Math.max(bb.w, bb.h);
+  if (bbSize < QS.minShapeDist) return { type: 'curve' };
+
+  // 1. LINE
+  const chordLen = ptDist(start, end);
+  let totalDev = 0;
+  for (const p of pts) totalDev += distFromLine(p, start, end);
+  const normDev = (totalDev / pts.length) / Math.max(chordLen, 1);
+  if (normDev < QS.lineDeviationThreshold && chordLen > QS.minShapeDist) {
+    return { type: 'line', geometry: { start, end }, confidence: 1 - normDev };
+  }
+
+  // 2. CIRCLE / ELLIPSE
+  const isClosedLoop = ptDist(start, end) < bbSize * QS.closeLoopThreshold;
+  if (isClosedLoop) {
+    const cx = (bb.minX + bb.maxX) / 2, cy = (bb.minY + bb.maxY) / 2;
+    const rx = bb.w / 2, ry = bb.h / 2;
+    if (rx > 4 && ry > 4) {
+      let fitErr = 0;
+      for (const p of pts) {
+        const dx = (p.x - cx) / rx, dy = (p.y - cy) / ry;
+        fitErr += Math.abs(dx * dx + dy * dy - 1);
+      }
+      const avgFitErr = fitErr / pts.length;
+      if (avgFitErr < QS.ellipseFitThreshold) {
+        const aspect = Math.min(rx, ry) / Math.max(rx, ry);
+        if (aspect > QS.circleAspectThreshold) {
+          return { type: 'circle', geometry: { cx, cy, r: (rx + ry) / 2 }, confidence: 1 - avgFitErr };
+        }
+        return { type: 'ellipse', geometry: { cx, cy, rx, ry }, confidence: 1 - avgFitErr };
+      }
+    }
+  }
+
+  // 3. ARC
+  const consistency = curvatureConsistency(pts);
+  if (consistency >= QS.arcCurvatureThreshold) {
+    const mid = pts[Math.floor(pts.length / 2)];
+    const circle = circleFrom3(start, mid, end);
+    if (circle && circle.r < bbSize * 8 && circle.r > bbSize * 0.3) {
+      const startAngle = Math.atan2(start.y - circle.cy, start.x - circle.cx);
+      const endAngle = Math.atan2(end.y - circle.cy, end.x - circle.cx);
+      let pos = 0, neg = 0;
+      for (let i = 0; i < pts.length - 2; i++) {
+        const v1x = pts[i+1].x - pts[i].x, v1y = pts[i+1].y - pts[i].y;
+        const v2x = pts[i+2].x - pts[i+1].x, v2y = pts[i+2].y - pts[i+1].y;
+        const cross = v1x * v2y - v1y * v2x;
+        if (cross > 0) pos++; else if (cross < 0) neg++;
+      }
+      return {
+        type: 'arc',
+        geometry: { cx: circle.cx, cy: circle.cy, r: circle.r, startAngle, endAngle, anticlockwise: neg > pos },
+        confidence: consistency,
+      };
+    }
+  }
+
+  // 4. SMOOTH CURVE fallback
+  return { type: 'curve', geometry: { pts }, confidence: 0.5 };
+}
+
+const GameCanvas = React.memo(({
+  currentWord, roundStatus, currentDrawerName, currentDrawerId,
+  isCurrentPlayerDrawing, onSendDrawing, revealedLetters,
+  currentPlayerId, currentPlayerName, round, isDrawingRef, getWordHint,
+  permanentCanvasRef
 }) => {
-  // More robust check: verify drawer identity using both ID and name
-  // Also compare names as a fallback
-  const isDrawer = (currentPlayerId && currentDrawerId && currentPlayerId === currentDrawerId) || 
-                  (currentPlayerName && currentDrawerName && currentPlayerName === currentDrawerName);
-  
-  // Debug logging
-  console.log('GameCanvas check:', {
-    currentPlayerId,
-    currentDrawerId,
-    currentPlayerName,
-    currentDrawerName,
-    isDrawer,
-    currentWord: currentWord || '(empty)',
-    round
-  });
-  const canvasRef = useRef(null);
-  const ctxRef = useRef(null);
-  const lastPosRef = useRef({ x: 0, y: 0 });
+  const isDrawer = (currentPlayerId && currentDrawerId && currentPlayerId === currentDrawerId) ||
+    (currentPlayerName && currentDrawerName && currentPlayerName === currentDrawerName);
+
+  const previewCanvasRef = useRef(null);
   const [brushSize, setBrushSize] = useState(5);
   const [brushColor, setBrushColor] = useState('#000000');
   const [tool, setTool] = useState('brush');
-  const [isDrawing, setIsDrawing] = useState(false);
+
+  // Stroke lifecycle refs
+  const isDrawingStateRef = useRef(false);
+  const strokeCommittedRef = useRef(false);
+  const activePointerIdRef = useRef(null);
+  const strokeSessionRef = useRef(0);
+  const strokeStartRef = useRef(null);
+  const lastMoveRef = useRef({ x: 0, y: 0 });
+  const currentStrokePointsRef = useRef([]);
+  const quickShapeRef = useRef(null); // null = freehand, else { type, geometry }
+  const holdTimerRef = useRef(null);
+  const rafRef = useRef(null);
 
   const colors = ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500'];
 
   const getCanvasPos = (e) => {
-    const canvas = canvasRef.current;
+    const canvas = previewCanvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.clientX ?? e.touches?.[0]?.clientX;
-    const clientY = e.clientY ?? e.touches?.[0]?.clientY;
     return {
-      x: (clientX - rect.left) * (canvas.width / rect.width),
-      y: (clientY - rect.top) * (canvas.height / rect.height)
+      x: (e.clientX - rect.left) * (canvas.width / rect.width),
+      y: (e.clientY - rect.top) * (canvas.height / rect.height)
     };
   };
 
-  // Generate word hint with underscores for guessers, showing revealed letters
-  const getWordHint = (word, playerId) => {
-    // If no word yet, show waiting message
-    if (!word) return 'Waiting for word...';
-    // If word is empty string, also show waiting
-    if (word === '') return 'Waiting for word...';
-    const playerRevealed = revealedLetters[playerId] || {};
-    return word.split('').map((char, index) => {
-      if (playerRevealed[index]) {
-        return playerRevealed[index];
-      }
-      return '_';
-    }).join(' ');
+  const applyCtxStyle = (ctx) => {
+    ctx.strokeStyle = tool === 'eraser' ? '#FFFFFF' : brushColor;
+    ctx.lineWidth = tool === 'eraser' ? brushSize * 2 : brushSize;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
   };
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (canvas && !currentWord) {
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-  }, [currentWord]);
+  const clearPreview = () => {
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return;
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  };
 
-  // Clear canvas when round changes
+  const clearHoldTimer = () => {
+    clearTimeout(holdTimerRef.current);
+    holdTimerRef.current = null;
+  };
+
+  const cancelRaf = () => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  };
+
+  // Reset canvas on new word/round
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas = permanentCanvasRef?.current;
     if (canvas) {
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
-  }, [currentWord]); // Clear when word changes (new round)
+    clearPreview();
+    clearHoldTimer();
+    cancelRaf();
+    quickShapeRef.current = null;
+    isDrawingStateRef.current = false;
+    strokeCommittedRef.current = false;
+    activePointerIdRef.current = null;
+  }, [currentWord, permanentCanvasRef]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const startDrawing = (e) => {
-    if (!isDrawer || gamePhase !== 'drawing') return;
-    e.preventDefault();
+  useEffect(() => () => { clearHoldTimer(); cancelRaf(); }, []);
 
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    ctxRef.current = ctx;
+  const drawSmoothedCurve = (ctx, pts) => {
+    if (pts.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const midX = (pts[i].x + pts[i+1].x) / 2;
+      const midY = (pts[i].y + pts[i+1].y) / 2;
+      ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+    }
+    ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+    ctx.stroke();
+  };
 
-    const { x, y } = getCanvasPos(e);
-    lastPosRef.current = { x, y };
+  const renderPreview = () => {
+    const preview = previewCanvasRef.current;
+    if (!preview) return;
+    const ctx = preview.getContext('2d');
+    ctx.clearRect(0, 0, preview.width, preview.height);
+    applyCtxStyle(ctx);
 
-    ctx.strokeStyle = tool === 'eraser' ? '#FFFFFF' : brushColor;
-    ctx.lineWidth = tool === 'eraser' ? brushSize * 2 : brushSize;
+    const qs = quickShapeRef.current;
+    if (qs) {
+      const g = qs.geometry;
+      ctx.beginPath();
+      if (qs.type === 'line') {
+        // endpoint follows pointer while holding
+        const end = lastMoveRef.current;
+        ctx.moveTo(g.start.x, g.start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+      } else if (qs.type === 'circle') {
+        ctx.arc(g.cx, g.cy, g.r, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (qs.type === 'ellipse') {
+        ctx.ellipse(g.cx, g.cy, g.rx, g.ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (qs.type === 'arc') {
+        ctx.arc(g.cx, g.cy, g.r, g.startAngle, g.endAngle, g.anticlockwise);
+        ctx.stroke();
+      } else {
+        // curve fallback
+        drawSmoothedCurve(ctx, g.pts);
+      }
+    } else {
+      const pts = currentStrokePointsRef.current;
+      drawSmoothedCurve(ctx, pts);
+    }
+  };
+
+  const scheduleRender = () => {
+    cancelRaf();
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      renderPreview();
+    });
+  };
+
+  const activateQuickShape = (sessionId) => {
+    if (
+      sessionId !== strokeSessionRef.current ||
+      !isDrawingStateRef.current ||
+      strokeCommittedRef.current
+    ) return;
+    const pts = currentStrokePointsRef.current;
+    const result = detectQuickShape(pts);
+    quickShapeRef.current = result.confidence >= QS.minConfidence ? result : { type: 'curve', geometry: { pts } };
+    scheduleRender();
+    if (window.navigator?.vibrate) window.navigator.vibrate(30);
+  };
+
+  const scheduleQuickShape = (x, y) => {
+    clearHoldTimer();
+    const pts = currentStrokePointsRef.current;
+    if (pts.length >= 2) {
+      const bb = boundingBox(pts);
+      if (Math.max(bb.w, bb.h) < QS.minShapeDist) return;
+    }
+    const sessionId = strokeSessionRef.current;
+    holdTimerRef.current = setTimeout(() => activateQuickShape(sessionId), QS.holdMs);
+  };
+
+  const commitStroke = () => {
+    if (strokeCommittedRef.current) return;
+    strokeCommittedRef.current = true;
+
+    const permanent = permanentCanvasRef?.current;
+    if (!permanent) return;
+    const ctx = permanent.getContext('2d');
+    const strokeColor = tool === 'eraser' ? '#FFFFFF' : brushColor;
+    const strokeWidth = tool === 'eraser' ? brushSize * 2 : brushSize;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeWidth;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.beginPath();
-    ctx.moveTo(x, y);
 
-    if (isDrawingRef) isDrawingRef.current = true;
-    setIsDrawing(true);
-    onSendDrawing({ type: 'start', x, y, color: tool === 'eraser' ? '#FFFFFF' : brushColor, size: brushSize });
+    const qs = quickShapeRef.current;
+    if (qs) {
+      const g = qs.geometry;
+      ctx.beginPath();
+      if (qs.type === 'line') {
+        const end = lastMoveRef.current;
+        ctx.moveTo(g.start.x, g.start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+        onSendDrawing({ type: 'line', x1: g.start.x, y1: g.start.y, x2: end.x, y2: end.y, color: strokeColor, size: strokeWidth });
+      } else if (qs.type === 'circle') {
+        ctx.arc(g.cx, g.cy, g.r, 0, Math.PI * 2);
+        ctx.stroke();
+        onSendDrawing({ type: 'circle', cx: g.cx, cy: g.cy, r: g.r, color: strokeColor, size: strokeWidth });
+      } else if (qs.type === 'ellipse') {
+        ctx.ellipse(g.cx, g.cy, g.rx, g.ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        onSendDrawing({ type: 'ellipse', cx: g.cx, cy: g.cy, rx: g.rx, ry: g.ry, color: strokeColor, size: strokeWidth });
+      } else if (qs.type === 'arc') {
+        ctx.arc(g.cx, g.cy, g.r, g.startAngle, g.endAngle, g.anticlockwise);
+        ctx.stroke();
+        onSendDrawing({ type: 'arc', cx: g.cx, cy: g.cy, r: g.r, startAngle: g.startAngle, endAngle: g.endAngle, anticlockwise: g.anticlockwise, color: strokeColor, size: strokeWidth });
+      } else {
+        // curve
+        const pts = g.pts;
+        if (pts && pts.length >= 2) {
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length - 1; i++) {
+            const midX = (pts[i].x + pts[i+1].x) / 2;
+            const midY = (pts[i].y + pts[i+1].y) / 2;
+            ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+          }
+          ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+          ctx.stroke();
+          onSendDrawing({ type: 'start', x: pts[0].x, y: pts[0].y, color: strokeColor, size: strokeWidth });
+          for (let i = 1; i < pts.length; i++) {
+            onSendDrawing({ type: 'draw', x: pts[i].x, y: pts[i].y, color: strokeColor, size: strokeWidth });
+          }
+        }
+      }
+    } else {
+      const pts = currentStrokePointsRef.current;
+      if (pts.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length - 1; i++) {
+          const midX = (pts[i].x + pts[i+1].x) / 2;
+          const midY = (pts[i].y + pts[i+1].y) / 2;
+          ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+        }
+        ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+        ctx.stroke();
+        onSendDrawing({ type: 'start', x: pts[0].x, y: pts[0].y, color: strokeColor, size: strokeWidth });
+        for (let i = 1; i < pts.length; i++) {
+          onSendDrawing({ type: 'draw', x: pts[i].x, y: pts[i].y, color: strokeColor, size: strokeWidth });
+        }
+      }
+    }
   };
 
-  const draw = (e) => {
-    if (!isDrawing || !isDrawer || gamePhase !== 'drawing') return;
+  const endStroke = (e) => {
+    if (!isDrawingStateRef.current) return;
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
+
+    clearHoldTimer();
+    cancelRaf();
+
+    const canvas = previewCanvasRef.current;
+    if (canvas?.hasPointerCapture?.(e.pointerId)) {
+      canvas.releasePointerCapture(e.pointerId);
+    }
+
+    commitStroke();
+    clearPreview();
+
+    isDrawingStateRef.current = false;
+    if (isDrawingRef) isDrawingRef.current = false;
+    activePointerIdRef.current = null;
+    quickShapeRef.current = null;
+    strokeStartRef.current = null;
+    currentStrokePointsRef.current = [];
+  };
+
+  const onPointerDown = (e) => {
+    if (!isDrawer || roundStatus !== 'drawing') return;
+    if (activePointerIdRef.current !== null) return;
+    e.preventDefault();
+
+    const canvas = previewCanvasRef.current;
+    canvas.setPointerCapture(e.pointerId);
+    activePointerIdRef.current = e.pointerId;
+
+    strokeSessionRef.current += 1;
+    strokeCommittedRef.current = false;
+    quickShapeRef.current = null;
+
+    const { x, y } = getCanvasPos(e);
+    strokeStartRef.current = { x, y };
+    lastMoveRef.current = { x, y };
+    currentStrokePointsRef.current = [{ x, y }];
+
+    isDrawingStateRef.current = true;
+    if (isDrawingRef) isDrawingRef.current = true;
+  };
+
+  const onPointerMove = (e) => {
+    if (!isDrawingStateRef.current) return;
+    if (e.pointerId !== activePointerIdRef.current) return;
     e.preventDefault();
 
     const { x, y } = getCanvasPos(e);
-    const ctx = ctxRef.current;
-    if (!ctx) return;
+    lastMoveRef.current = { x, y };
 
-    const last = lastPosRef.current;
-    const midX = (last.x + x) / 2;
-    const midY = (last.y + y) / 2;
-
-    ctx.quadraticCurveTo(last.x, last.y, midX, midY);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(midX, midY);
-
-    lastPosRef.current = { x, y };
-    onSendDrawing({ type: 'draw', x, y, color: tool === 'eraser' ? '#FFFFFF' : brushColor, size: brushSize });
-  };
-
-  const stopDrawing = () => {
-    if (!isDrawing) return;
-    if (ctxRef.current) {
-      const { x, y } = lastPosRef.current;
-      ctxRef.current.lineTo(x, y);
-      ctxRef.current.stroke();
+    if (quickShapeRef.current) {
+      scheduleRender();
+      return;
     }
-    if (isDrawingRef) isDrawingRef.current = false;
-    setIsDrawing(false);
+
+    currentStrokePointsRef.current.push({ x, y });
+
+    const pts = currentStrokePointsRef.current;
+    const prev = pts[pts.length - 2];
+    const dx = x - prev.x;
+    const dy = y - prev.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < QS.holdTolerance) {
+      scheduleQuickShape(x, y);
+    } else {
+      clearHoldTimer();
+    }
+
+    scheduleRender();
   };
 
   const clearCanvas = () => {
-    if (!isDrawer || gamePhase !== 'drawing') return;
-
-    const canvas = canvasRef.current;
+    if (!isDrawer || roundStatus !== 'drawing') return;
+    const canvas = permanentCanvasRef?.current;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
     onSendDrawing({ type: 'clear' });
   };
 
-  // Debug logging
-  console.log('GameCanvas render:', {
-    isDrawer,
-    isCurrentPlayerDrawing,
-    currentPlayerId,
-    currentDrawerId,
-    currentWord: currentWord ? currentWord : '(empty)',
-    round
-  });
+  const hint = getWordHint(currentWord, currentPlayerId);
 
   return (
     <div className={styles.canvasPanel}>
       <div className={styles.wordDisplay}>
         <div className={styles.wordBox}>
           <h3 className={styles.wordTitle}>
-            {/* Use isDrawer for more reliable check - compare IDs directly */}
             {isDrawer && currentWord ? (
               <>
-                <div>✏️ You're drawing!</div>
-                <div style={{ fontSize: '2rem', marginTop: '0.5rem', fontWeight: 'bold' }}>
-                  {currentWord}
-                </div>
+                <div>✏️ Your word:</div>
+                <div className={styles.drawerWord}>{currentWord}</div>
               </>
             ) : (
               <>
-                <div>🎨 {currentDrawerName || 'Someone'} is drawing...</div>
-                <div style={{ fontSize: '1.5rem', marginTop: '0.5rem', letterSpacing: '0.3rem' }}>
-                  {getWordHint(currentWord, currentPlayerId)}
-                </div>
+                <div>🎨 {currentDrawerName} is drawing...</div>
+                <div className={styles.wordHint}>{hint}</div>
               </>
             )}
           </h3>
         </div>
       </div>
 
-      {/* Show tools only to the actual drawer - use isDrawer for reliable check */}
-      {isDrawer && gamePhase === 'drawing' && (
+      {isDrawer && roundStatus === 'drawing' && (
         <div className={styles.toolsContainer}>
           <div className={styles.colorPalette}>
             {colors.map((color) => (
@@ -854,77 +1275,65 @@ const GameCanvas = ({
               />
             ))}
           </div>
-
           <div className={styles.toolButtons}>
-            {tool !== 'eraser' && (
-              <button
-                onClick={() => setTool('eraser')}
-                className={styles.toolButton}
-                title="Eraser"
-              >
-                <Eraser />
-              </button>
+            {tool !== 'eraser' ? (
+              <button onClick={() => setTool('eraser')} className={styles.toolButton} title="Eraser"><Eraser /></button>
+            ) : (
+              <button onClick={() => setTool('brush')} className={`${styles.toolButton} ${styles.toolButtonActive}`} title="Brush"><Palette /></button>
             )}
-            {tool === 'eraser' && (
-              <button
-                onClick={() => setTool('brush')}
-                className={`${styles.toolButton} ${styles.toolButtonActive}`}
-                title="Pencil"
-              >
-                <Palette />
-              </button>
-            )}
-            <button onClick={clearCanvas} className={styles.toolButton}>
-              <RotateCcw />
-            </button>
+            <button onClick={clearCanvas} className={styles.toolButton}><RotateCcw /></button>
           </div>
-
           <div className={styles.brushSizeContainer}>
             <span className={styles.brushSizeLabel}>Size:</span>
-            <input
-              type="range"
-              min="1"
-              max="20"
-              value={brushSize}
-              onChange={(e) => setBrushSize(e.target.value)}
-              className={styles.brushSizeSlider}
-            />
+            <input type="range" min="1" max="20" value={brushSize}
+              onChange={(e) => setBrushSize(Number(e.target.value))}
+              className={styles.brushSizeSlider} />
             <span className={styles.brushSizeLabel}>{brushSize}px</span>
           </div>
         </div>
       )}
 
       <div className={styles.canvasContainer}>
-        <canvas
-          ref={canvasRef}
-          width={600}
-          height={400}
-          className={styles.canvas}
-          style={{ touchAction: 'none', cursor: tool === 'eraser' ? 'cell' : 'crosshair' }}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={stopDrawing}
-        />
+        <div className={styles.canvasWrapper}>
+          <canvas
+            ref={permanentCanvasRef}
+            width={600}
+            height={400}
+            className={styles.canvas}
+          />
+          <canvas
+            ref={previewCanvasRef}
+            width={600}
+            height={400}
+            className={styles.previewCanvas}
+            style={{
+              touchAction: 'none',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none',
+              cursor: tool === 'eraser' ? 'cell' : 'crosshair'
+            }}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endStroke}
+            onPointerCancel={endStroke}
+          />
+        </div>
       </div>
     </div>
   );
-};
+});
 
-const ChatPanel = ({ 
-  messages,
-  isDrawer, 
-  guessInput, 
-  setGuessInput, 
-  sendGuess,
-  players = []
+const ChatPanel = ({
+  messages, isDrawer, guessInput, setGuessInput, sendGuess,
+  players, isSending, alreadyGuessedCorrectly, myCorrectPoints,
+  roundStatus, guessListRef, onInputFocus, onInputBlur
 }) => {
-  const getScore = (playerId) => {
-    const p = players.find(p => p.id === playerId);
-    return p?.score || 0;
+  const getScore = (playerId) => players.find(p => p.id === playerId)?.score || 0;
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    sendGuess();
   };
 
   return (
@@ -933,62 +1342,73 @@ const ChatPanel = ({
         <h3 className={styles.chatTitle}>Guesses</h3>
       </div>
 
-      <div className={styles.chatMessages}>
-        {messages.map((msg) => (
-          <div key={msg.id} className={styles.messageContainer}>
-            <div className={styles.messageHeader}>
-              <span className={styles.messageSender}>{msg.player}</span>
-              <span className={styles.messageScore}>{getScore(msg.playerId)} pts</span>
-              <span className={styles.messageTime}>{msg.time}</span>
+      <div className={styles.chatMessages} ref={guessListRef}>
+        {messages.length === 0 ? (
+          <p className={styles.noGuesses}>No guesses yet</p>
+        ) : (
+          messages.map((msg, i) => (
+            <div key={msg.id || i} className={styles.messageContainer}>
+              <div className={styles.messageHeader}>
+                <span className={styles.messageSender}>{msg.player}</span>
+                <span className={styles.messageScore}>{getScore(msg.playerId)} pts</span>
+                <span className={styles.messageTime}>{msg.time}</span>
+              </div>
+              <div className={`${styles.messageContent} ${msg.type === 'correct' ? styles.correctGuess : styles.wrongGuess}`}>
+                {msg.type === 'correct' ? (
+                  <span>{msg.message} <span className={styles.pointsBadge}>+{msg.points}</span></span>
+                ) : (
+                  msg.message
+                )}
+              </div>
             </div>
-            <div className={`${styles.messageContent} ${msg.type === 'correct' ? styles.correctGuess : styles.wrongGuess}`}>
-              {msg.type === 'correct' && <span className={styles.correctIcon}>✅ </span>}
-              {msg.message}
-              {msg.type === 'correct' && <span className={styles.pointsBadge}> +10</span>}
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
-      {!isDrawer ? (
-        <div className={styles.guessInputContainer}>
-          <input
-            type="text"
-            value={guessInput}
-            onChange={(e) => setGuessInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && sendGuess()}
-            placeholder="Type your guess..."
-            className={styles.guessInput}
-            autoFocus
-          />
-          <button onClick={sendGuess} className={styles.guessButton}>
-            <Send size={18} />
-          </button>
-        </div>
-      ) : (
-        <div className={styles.drawerMessage} />
-      )}
+      <div className={styles.guessInputContainer}>
+        {isDrawer ? (
+          <div className={styles.drawerMessage} />
+        ) : alreadyGuessedCorrectly ? (
+          <div className={styles.alreadyCorrect}>
+            ✅ You guessed correctly! <span className={styles.pointsBadge}>+{myCorrectPoints}</span>
+          </div>
+        ) : roundStatus !== 'drawing' ? (
+          <div className={styles.waitingInput}>Waiting for round to start...</div>
+        ) : (
+          <form onSubmit={handleSubmit} className={styles.guessForm}>
+            <input
+              type="text"
+              value={guessInput}
+              onChange={(e) => setGuessInput(e.target.value)}
+              onFocus={onInputFocus}
+              onBlur={onInputBlur}
+              placeholder="Type your guess..."
+              className={styles.guessInput}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck="false"
+              disabled={isSending}
+            />
+            <button
+              type="submit"
+              className={styles.guessButton}
+              disabled={isSending || !guessInput.trim()}
+            >
+              <Send size={18} />
+            </button>
+          </form>
+        )}
+      </div>
     </div>
   );
 };
 
 const Toast = ({ message, type }) => {
-  const getIcon = () => {
-    switch (type) {
-      case 'success':
-        return <CheckCircle size={20} />;
-      case 'warning':
-        return <XCircle size={20} />;
-      case 'info':
-        return <Trophy size={20} />;
-      default:
-        return <CheckCircle size={20} />;
-    }
-  };
-
+  const icon = type === 'success' ? <CheckCircle size={20} /> : type === 'info' ? <Trophy size={20} /> : <XCircle size={20} />;
   return (
     <div className={`${styles.toast} ${styles[`toast${type.charAt(0).toUpperCase() + type.slice(1)}`]}`}>
-      {getIcon()}
+      {icon}
       <span>{message}</span>
     </div>
   );
